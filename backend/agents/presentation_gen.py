@@ -3,14 +3,10 @@ from agents.pydantic_models import Content, Presentation
 from pydantic_ai.models.groq import GroqModel
 from pydantic_ai.providers.groq import GroqProvider
 
-# llm = GroqModel(
-#     # 'deepseek-r1-distill-llama-70b',
-#     "llama3-70b-8192",
-#     provider=GroqProvider(api_key='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')
-# )
+
 
 presentation_gen_agent = Agent(
-    'google-gla:gemini-2.5-flash',  #'google-gla:learnlm-2.0-flash-experimental', #
+    'google-gla:gemini-2.5-flash', 
     deps_type=Content,
     result_type=Presentation,
     model_settings={"temperature": 0.0}
