@@ -12,13 +12,14 @@ from pydantic_ai import Agent, RunContext
 import nest_asyncio
 import asyncio
 import uuid
+import requests
 
 nest_asyncio.apply()
 
-from typing import List, Literal, Dict
-from langgraph.graph import StateGraph, START, END
 import json
 from datetime import datetime
+from mas.workflow import graph
+from api import LearningMaterial
 
 ## Data Base
 from urllib.parse import quote_plus
@@ -41,9 +42,6 @@ except Exception as e:
 
 mongodb = client.get_database('chatbotdb')
 
-
-os.environ["GEMINI_API_KEY"] = "AIzaSyBrdIox1oOltdDbKX03ANBk2gjLO4EtGSE"
-
 app = FastAPI()
 
 app.add_middleware(
@@ -60,102 +58,157 @@ agent = Agent('google-gla:gemini-2.0-flash')
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept() 
 
-    # data = await websocket.receive_text()
-    # user_query = json.loads(data)
-
-    # agent = Agent(  
-    #     'google-gla:gemini-1.5-flash',
-    #     system_prompt='Be concise, reply user query',  
-    # )
-
-    # result = await agent.run(user_query)  
-
-    # await websocket.send_json({
-    #     "role": "agent",
-    #     "content": result.data,                
-    #     "timestamp": str(datetime.now())
-    # })
     try:
         while True:
             data = await websocket.receive_text()
             user_query = json.loads(data)
-            print(user_query)
             
+            session_id = user_query["session_id"]
+
             mongodb["chatbotdb"].update_one(
-                    { "session_id": user_query['session_id'] },
-                    {
-                        "$push": { 
-                            "messages": {
-                                "content": user_query['content'],
-                                "role": user_query['role'],
-                                "timestamp": user_query['timestamp']
-                            },
-                        }
-                    },
-                    upsert=True
-                )
-            
+                { "session_id": session_id },
+                {
+                    "$push": { 
+                        "messages": {
+                            "content": user_query['content'],
+                            "role": user_query['role'],                                
+                            "timestamp": user_query['timestamp']
+                        },
+                    }
+                },
+                
+                upsert=True
+            )
+                
+            init_state = {
+                "session_id": session_id,
+                "project_id": user_query["project_id"],
+                "user_id": user_query["user_id"],
+                "title": "",
+                "user_query": user_query["content"],
+                "websocket": websocket, 
+                "results": {},
+                "todo_list": {},
+                "lecture_notes": {},
+                "presentation_template_url": "",
+                "presentation_folder_url": "",
+                "presentation_urls": [],                
+                "links_lecture": [],
+                "links_quiz" : [],
+            }
 
-            async def run_agent(query):
-                # Create new UUID for message_id
-                message_id = str(uuid.uuid4())
+            current_state = {}
+            async for chunk in graph.astream(init_state, stream_mode="values", config={"recursion_limit": 1000}):
+                current_state = dict(chunk) 
+                
+                await websocket.send_json({
+                    "messageId": str(uuid.uuid4()),
+                    "role": "agent",
+                    "content": f"{str(current_state)}",                
+                    "timestamp": str(datetime.now())
+                })   
+                
+                
 
-                # Store final message to save database
-                message_content = ""
+                if current_state.get("results").get("quiz"):
+                    quiz_data = [{
+                        "question": quiz['question'],
+                        "option": quiz['option'],
+                        "answer": quiz['answer'],
+                        # "explain": quiz['explain'],
+                        "source": quiz['source']
+                    } for quiz in current_state.get("results").get("quiz")['questions']]
+                else:
+                    quiz_data = []
+                # current_state['title'] = current_state.get("results").get("curriculum")['title']
+                send_data = {
+                    "todoList": list(current_state.get("todo_list").values()),
+                    "curriculum": current_state.get("results").get("curriculum"),
+                    "lectureNotes": [{"content": note} for note in list(current_state.get("lecture_notes").values())],
+                    "quizzes": quiz_data,
+                    "presentationURL": current_state.get("presentation_urls"),
+                    "links_lecture": current_state.get("links_lecture"),
+                    "links_quiz": current_state.get("links_quiz")
+                }
 
-                async with agent.run_stream(query) as response:
-                    async for data in response.stream_text(delta=True):
-                        message_content += data
+                if current_state.get("results").get("curriculum"):
+                    curriculum = current_state.get("results").get("curriculum")
+                    # print(curriculum)
+                    current_state["title"] = curriculum["title"]
 
-                        # Send response message back to chat
-                        await websocket.send_json({
-                            "messageId": message_id,
-                            "role": "agent",
-                            "content": data,
-                            "timestamp": str(datetime.now())
-                        })
-
+                if current_state.get("links_quiz"):
+                    send_data["event"] = "quiz_created"
+                
+                ##==============
+              
+                # "messages": {
+                #             "content": user_query['content'],
+                #             "role": user_query['role'],                                
+                #             "timestamp": user_query['timestamp']
+                #         },
+                
                 mongodb["chatbotdb"].update_one(
-                    { "session_id": user_query['session_id'] },
-                    {
-                        "$push": { 
-                            "messages": {
-                                "content": message_content,
-                                "role": 'agent',
-                                "timestamp": str(datetime.now())                                
-                            },                                
+                { "session_id": session_id },
+                {
+                    "$push": { 
+                        "state": {
+                            "project_id": current_state["project_id"],
+                            "user_id": current_state["user_id"],
+                            "results": current_state.get("results"),
+                            "todo_list": current_state.get("todo_list"),
+                            "lecture_notes": [{"content": note} for note in list(current_state.get("lecture_notes").values())],
+                            "presentation_template_url": current_state.get("presentation_template_url"),
+                            "presentation_folder_url": current_state.get("presentation_folder_url"),
+                            "presentation_urls": current_state.get("presentation_urls"),
+                            "links_lecture": current_state.get("links_lecture"),
+                            "links_quiz" : current_state.get("links_quiz")
                         }
-                    },
-                    upsert=True
-                )
-                        
-            result = asyncio.run(run_agent(user_query['content']))
-            
+                    }
+                },
+                
+                upsert=True
+            )
+                
+                await websocket.send_json(send_data)
 
-            # # Dùng await nếu có hàm async
-            # result = await agent.run(user_query['content'])
-            
+            await websocket.send_json({
+                "messageId": "",
+                "role": "agent",
+                "content": "",
+                "timestamp": str(datetime.now()),
+                "type": "export"
+            })
+
+            data = await websocket.receive_text()
+            is_export = json.loads(data)
+
+            if is_export["export"]:
+                materials = LearningMaterial(
+                    curriculum = current_state.get("results").get("curriculum"),
+                    lecture_urls = current_state.get("links_lecture"),
+                    presentation_urls = [],
+                    quiz_urls = current_state.get("links_quiz")
+                )
+
+                url = "http://localhost:8000/export/classroom"
+                payload = materials.model_dump()
+
+                response = requests.post(url, json=payload)
+
+                # Handle response
+                if response.ok:
+                    print(response.json())
+                else:
+                    print("Error:", response.status_code)
+
+
     except WebSocketDisconnect:
         print("Client disconnected")
     except Exception as e:
         print("Error:", e)
         await websocket.close()
 
-# async def waypoints_generator():
-#     with open("sample.txt", "r") as file:
-#         content = file.read()
-    
-#         # Split the content into tokens
-#         tokens = [{"data": token} for token in content.split()]
 
-#     for token in tokens:
-#         data = json.dumps(token)
-#         yield f"event: streamToken\ndata: {data}\n\n"
-#         await sleep(0.1)
-
-# @app.get("/api/py/chat")
-# async def root():
-#     return StreamingResponse(waypoints_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8001)

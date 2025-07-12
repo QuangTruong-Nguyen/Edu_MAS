@@ -25,3 +25,6 @@ __pycache__/
 # Ignore editor settings
 .vscode/
 .idea/
+
+credentials.json
+token.json

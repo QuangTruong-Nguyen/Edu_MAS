@@ -81,7 +81,7 @@ export default function Chat( { params }: Props ) {
         <div className="flex flex-col h-full w-full bg-white/80">
             
             <div className="flex-1">
-                <ChatComponent sessionId={session_id} />
+                <ChatComponent sessionId={session_id} project_id={project_id} />
             </div>
         </div>
     );

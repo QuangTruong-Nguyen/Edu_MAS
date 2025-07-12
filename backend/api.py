@@ -6,9 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from database.schema import SessionLocal, ProjectSchema, SessionSchema, UserSchema, BookSchema
 from sqlalchemy.orm import Session
-
+import json
 from typing import List
 from datetime import datetime
+
+from agents.pydantic_models import CurriculumResult
+from presentation.classroom_ops import ClassroomMaterial, classroom_create_course, classroom_create_topic, classroom_create_coursework_material
 # from database import SessionLocal, User
 
 
@@ -17,7 +20,10 @@ from urllib.parse import quote_plus
 from pymongo.mongo_client import MongoClient
 # from langgraph.checkpoint.mongodb import MongoDBSaver
 from pymongo.server_api import ServerApi
-
+# from data.unstructured_utils import chunk_data, save_image, chunk_text
+from data.newdata import split_markdown_by_title
+from data.huggingFace_utils import embedding
+from data.vectorDB import setup_vector_store
 db_password = quote_plus("Truong2003@")
 
 uri = f"mongodb+srv://quangtruongairline:{db_password}@chatbotdb.pzsqjdr.mongodb.net/?retryWrites=true&w=majority&appName=chatbotdb"
@@ -32,6 +38,7 @@ except Exception as e:
     print(e)
 
 mongodb = client.get_database('chatbotdb')
+
 # mongo_memory = MongoDBSaver(db)
 
 
@@ -263,6 +270,16 @@ def get_messages_history(sessionId: str):
         return messages.get("messages")
     else:
         return []
+    
+@app.get("/get_session_info")
+def get_session_info(sessionId: str):
+    session_info = mongodb["chatbotdb"].find_one({"session_id": sessionId}) 
+    if session_info:
+        return session_info.get("state")
+    else:
+        return []
+        
+        
 
 class FileInfo(BaseModel):
     file_url: str
@@ -291,13 +308,59 @@ def get_messages_history(mess: Message ):
         upsert=True
     )
     
-    
 
     
 @app.post("/api/handle_uploaded_pdf")
 async def handle_uploaded_pdf(file_info: FileInfo):
     print(f"📄 Received PDF: {file_info.file_name}")
     print(f"🌐 URL: {file_info.file_url}")
+
+@app.post("/extract")
+async def processing(path_file):
+
+    chunks=split_markdown_by_title(filepath=path_file)
+    
+    embedddings=embedding()
+    setup_vector_store(chunks, embedddings)
+    print("SAVE DB")
+
+
+class LearningMaterial(BaseModel):
+    curriculum: CurriculumResult
+    lecture_urls: List[str]
+    presentation_urls: List[str]
+    quiz_urls: List[str]
+
+
+@app.post("/export/classroom")
+def export_to_classroom(materials: LearningMaterial):
+    curriculum = materials.curriculum
+    name = curriculum.title
+    description = curriculum.overview
+    titles = [mod.title for mod in curriculum.modules]
+    
+    # Create a new course
+    course_id = classroom_create_course(name, description)
+    
+    # Create topic and upload file base on urls
+    for idx, title in enumerate(titles):
+        topic_id = classroom_create_topic(course_id, title)
+
+
+        # Upload lecture note
+        classroom_materials = [
+            ClassroomMaterial(url = materials.lecture_urls[idx], title = f"[LECTURE-NOTE] {title}")
+        ]
+
+        classroom_create_coursework_material(course_id, f"[LECTURE-NOTE] {title}", "", classroom_materials, topic_id)
+
+
+        # Upload quizzes
+        classroom_materials = [
+            ClassroomMaterial(url = materials.quiz_urls[idx], title = f"[QUIZ] {title}")
+        ]
+
+        classroom_create_coursework_material(course_id, f"[QUIZ] {title}", "", classroom_materials, topic_id)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -37,6 +37,7 @@ import Image from 'next/image'
 import { getCookie } from '@/utils';
 import { usePathname } from "next/navigation";
 import UploadDrawer from "../ui/UploadDrawer";
+
 // Menu items
 const items = [
     {
@@ -73,7 +74,8 @@ type Props = {
 
 export function AppSidebar({ userId, projectId  } : Props) {
     const router = useRouter()
-    
+    const pathname = usePathname();
+
     // const [sessions, setSessions] = useState([])
     
     useEffect(() => {
@@ -82,7 +84,7 @@ export function AppSidebar({ userId, projectId  } : Props) {
       .then(res => res.json())
       .then(data => setSessions(data)            )
       .catch(err => console.error(err))
-    }, [])
+    }, [userId, projectId, pathname]);
 
     // console.log(sessions)
 
@@ -161,9 +163,9 @@ export function AppSidebar({ userId, projectId  } : Props) {
               
                 if (data.session_id) {
                     router.push(`/p/${projectId}/${data.session_id}`);
-                     setTimeout(() => {
-                                window.location.reload();
-                                }, 20); 
+                    //  setTimeout(() => {
+                    //             window.location.reload();
+                    //             }, 10); 
                 } else {
                     const sessionsResponse = await fetch(`http://localhost:8000/p/${projectId}/${data.session_id}`);
                     const sessionsData = await sessionsResponse.json();
@@ -187,7 +189,7 @@ export function AppSidebar({ userId, projectId  } : Props) {
         const [sessions, setSessions] = useState<SessionItem[]>([]);
 
 
-    const pathname = usePathname();
+    // const pathname = usePathname();
     let currentSessionId = null;
     const pathParts = pathname.split('/');
     if (pathParts.length >= 4 && pathParts[1] === 'p') {

@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import Image from 'next/image'
 import { todo } from 'node:test'
 import { v4 } from 'uuid'
+import { getCookie } from '@/utils';
 
 
 interface Message {
@@ -23,9 +24,13 @@ interface Message {
   timestamp: string;
   content: string;
   session_id: string;
+  project_id: string;
+  user_id: string; 
 }
 
 type Conversation = Message[];
+
+
 
 // function addMessage(conversation: Conversation, role: 'agent' | 'user', text: string): Conversation {
 //   const newMessage: Message = {
@@ -37,11 +42,63 @@ type Conversation = Message[];
 //   return [...conversation, newMessage];
 // }
 
-type Props = {
-    sessionId: string
-}
+let result: {
+  todoList: Array<{
+      task_id: string;
+      description: string;
+      status: string;
+  }>,
+  curriculum: {
+      title: string;
+      overview: string;
+      modules: Array<{
+          title: string;
+          content: string;
+          task_id: string;
+      }>;
+  } | null,
+  lectureNotes: Array<{
+    // filename: string;
+    content: string;
+    // url: string;
+  }>,
+  quizzes: Array<{
+    question: string;
+    option: string[];
+    answer: string;
+    explain: string;
+    source: string;
+  }>,
+  presentationURL: Array<{
+    name: string;
+    url: string;
+  }>
+} = {
+  todoList: [],
+  curriculum: {
+    title: '',
+    overview: '',
+    modules: []
+  },
+  lectureNotes: [],
+  quizzes: [{
+    question: '',
+    option: [''],
+    answer: '',
+    explain: '',
+    source: ''
+  }],
+  presentationURL: [{
+    name: '',
+    url: ''
+  }]
+};
 
-const ChatComponent = ({ sessionId }: Props) => {
+type Props = {
+    sessionId: string;
+    project_id: string;}
+
+const ChatComponent = ({ sessionId, project_id }: Props) => {
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [messages, setMessages] = useState<Conversation>([]);
     const [messageText, setMessageText] = useState('');
@@ -49,7 +106,12 @@ const ChatComponent = ({ sessionId }: Props) => {
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [isConnected, setIsConnected] = useState(false);
-  
+    const user_id = getCookie("userId");
+
+    const [quizCreated, setQuizCreated] = useState(0);
+
+
+
     useEffect(() => {
       fetch(`http://localhost:8000/messages?sessionId=${sessionId}`)
         .then(res => res.json())
@@ -128,24 +190,32 @@ const ChatComponent = ({ sessionId }: Props) => {
             const parsedMessage = JSON.parse(event.data);
 
             const { messageId, content, role, timestamp, session_id } = messagesRef.current[messagesRef.current.length - 1];
-            if (parsedMessage.messageId !== messageId) {
-                if (parsedMessage.hasOwnProperty("role")) {
-                  setMessages((prev) => [...prev, parsedMessage]);
-                }
+            
+            if (parsedMessage.event === 'quiz_created') {
+                setQuizCreated(prev => prev + 1); // <-- thêm dòng này!
+              }
+
+
+            if (parsedMessage.hasOwnProperty("role")) {
+              if (parsedMessage.messageId !== messageId) {
+                    setMessages((prev) => [...prev, parsedMessage]);
+              } else {
+                  setMessages((prevMessages) => {
+                    if (prevMessages.length === 0) return prevMessages;
+
+                    const updatedMessages = [...prevMessages];
+                    const lastIndex = updatedMessages.length - 1; 
+
+                    updatedMessages[lastIndex] = {
+                      ...updatedMessages[lastIndex],
+                      content: updatedMessages[lastIndex].content + parsedMessage.content,
+                    };
+                  
+                    return updatedMessages;
+                  });
+              }
             } else {
-                setMessages((prevMessages) => {
-                  if (prevMessages.length === 0) return prevMessages;
-
-                  const updatedMessages = [...prevMessages];
-                  const lastIndex = updatedMessages.length - 1; 
-
-                  updatedMessages[lastIndex] = {
-                    ...updatedMessages[lastIndex],
-                    content: updatedMessages[lastIndex].content + parsedMessage.content,
-                  };
-                
-                  return updatedMessages;
-                });
+              result = parsedMessage;
             }
 
             
@@ -185,6 +255,8 @@ const ChatComponent = ({ sessionId }: Props) => {
           role: 'user', 
           timestamp: new Date().toISOString(),
           session_id: sessionId,
+          project_id: project_id,
+          user_id: user_id
         };
 
         setMessages((prev) => [...prev, message]);
@@ -263,7 +335,7 @@ const ChatComponent = ({ sessionId }: Props) => {
 
                 {/* message list */}
                 <ScrollArea className="border rounded-xl row-span-8">
-                    <MessageList messages={messages} />
+                    <MessageList websocket={ws} isConnected={isConnected} messages={messages} />
                      <div ref={messagesEndRef} />
                 </ScrollArea>
                 
@@ -285,7 +357,8 @@ const ChatComponent = ({ sessionId }: Props) => {
             <ResizableHandle withHandle/>
 
             <ResizablePanel className="" defaultSize={40} minSize={40}>
-                  {/* <ResultTab result={result}/> */}
+                  <ResultTab result={result} websocket={ws} isConnected={isConnected} sessionId={sessionId} projectId={project_id} 
+                              quizCreated={quizCreated} />
                   <div className="flex rounded-xl h-full items-center justify-center p-10">
 
                   </div>

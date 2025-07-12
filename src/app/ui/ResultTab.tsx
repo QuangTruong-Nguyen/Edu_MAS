@@ -1,5 +1,5 @@
 'use client'
-// import { useState } from "react";
+import { useState,useEffect } from "react";
 
 import {
     Card, 
@@ -59,6 +59,11 @@ import Link from "next/link";
 import path from "path";
 import { FileText, ExternalLink } from "lucide-react";
 import { FaFilePdf } from "react-icons/fa";
+import { getCookie } from '@/utils';
+
+
+// links_lecture: Array<string>;
+// links_quiz: Array<string>;
 
 
 type Props = {
@@ -79,16 +84,157 @@ type Props = {
             }>
         } | null,
         
-        lectureNotes: Array<string>;
+        lectureNotes: Array<{
+           content: string;
+        }>,
 
+        quizzes: Array<{
+            question: string;
+            option: string[];
+            answer: string;
+            // explain: string;
+            source: string;
+        }>,
+
+        presentationURL: Array<{
+            name: string;
+            url: string;
+        }>,
         links_lecture: Array<string>;
         links_quiz: Array<string>;
-    }    
+    },
+    websocket: WebSocket | null;
+    isConnected: boolean;
+    projectId?: string;
+    sessionId?: string;
+    quizCreated?: number;
 }
 
 // const [openPdfIndex, setOpenPdfIndex] = useState<number | null>(null);
+const user_id = getCookie("userId");
 
-const ResultTab = ({ result = { todoList: [], curriculum: {title: '', overview: '', modules: []}, lectureNotes: [] , links_lecture:[], links_quiz: []} }: Props) => {
+const ResultTab = ({ 
+    result = { 
+                    todoList: [], 
+                    curriculum: {title: '', overview: '', modules: []}, 
+                    lectureNotes: [],
+                    quizzes: [],
+                    presentationURL: [],
+                    links_lecture:[], 
+                    links_quiz: []},
+            websocket,
+            isConnected,
+            projectId,
+            sessionId,
+            quizCreated = 0
+             }:  Props) => {  //: Props
+
+    // const [result, setResult] = useState({
+    //                             todoList: [],
+    //                             curriculum: { title: '', overview: '', modules: [] },
+    //                             lectureNotes: [],
+    //                             quizzes: [],
+    //                             presentationURL: [],
+    //                             links_lecture: [],
+    //                             links_quiz: []
+    //                         });
+    // useEffect(() => {
+    //     async function fetchData() {
+    //         if (!sessionId) return;
+    //         const res = await fetch(`/get_session_info?sessionId=${sessionId}`);
+    //         const data = await res.json();
+    //         // Nếu backend trả về object rỗng thì giữ nguyên default
+    //         setResult({
+    //             todoList: data.todoList || [],
+    //             curriculum: data.curriculum || { title: '', overview: '', modules: [] },
+    //             lectureNotes: data.lectureNotes || [],
+    //             quizzes: data.quizzes || [],
+    //             presentationURL: data.presentationURL || [],
+    //             links_lecture: data.links_lecture || [],
+    //             links_quiz: data.links_quiz || []
+    //         });
+    //     }
+    //     fetchData();
+    // }, [sessionId]);                            
+    
+    // const [linksQuiz, setLinksQuiz] = useState<string[]>([]);
+    // useEffect(() => {
+    //     if (!sessionId) return;
+    //     fetch(`http://127.0.0.1:8000/get_session_info?sessionId=${sessionId}`)
+    //     .then(res => res.json())
+    //     .then((data: any[]) => {
+    //         const allLinks = data.flatMap((item: any) => item.links_quiz || []);
+    //         const uniqueLinks = Array.from(new Set(allLinks));
+    //         setLinksQuiz(uniqueLinks);
+    //     });
+    //     }, [sessionId]);
+    
+    // const [linksLecture, setLinksLecture] = useState<string[]>([]);
+    // useEffect(() => {
+    //     if (!sessionId) return;
+    //     fetch(`http://127.0.0.1:8000/get_session_info?sessionId=${sessionId}`)
+    //     .then(res => res.json())
+    //     .then((data: any[]) => {
+    //         const allLinks = data.flatMap((item: any) => item.links_lecture || []);
+    //         const uniqueLinks = Array.from(new Set(allLinks));
+    //         setLinksLecture(uniqueLinks);
+    //     });
+    //     }, [sessionId]);
+
+    const [linksQuiz, setLinksQuiz] = useState<string[]>([]);
+    const [linksLecture, setLinksLecture] = useState<string[]>([]);
+
+    // useEffect(() => {
+    // if (!sessionId) return;
+
+    // fetch(`http://127.0.0.1:8000/get_session_info?sessionId=${sessionId}`)
+    //     .then(res => res.json())
+    //     .then((data: any[]) => {
+    //     const getUniqueLinks = (key: 'links_quiz' | 'links_lecture') =>
+    //         Array.from(new Set(data.flatMap((item: any) => item[key] || [])));
+
+    //     setLinksQuiz(getUniqueLinks('links_quiz'));
+    //     setLinksLecture(getUniqueLinks('links_lecture'));
+    //     });
+    // }, [sessionId]);
+
+
+    const fetchLinks = () => {
+        fetch(`http://127.0.0.1:8000/get_session_info?sessionId=${sessionId}`)
+            .then(res => res.json())
+            .then((data: any[]) => {
+            const getUniqueLinks = (key: 'links_quiz' | 'links_lecture') =>
+                Array.from(new Set(data.flatMap((item: any) => item[key] || [])));
+            setLinksQuiz(getUniqueLinks('links_quiz'));
+            setLinksLecture(getUniqueLinks('links_lecture'));
+            });
+        };
+    
+    // useEffect(() => {  
+    //     if (!sessionId) return;
+    //     fetchLinks();
+    //     }, [sessionId]);
+
+    
+        
+    useEffect(() => {
+        if (!sessionId) return;
+        // fetch(`http://127.0.0.1:8000/get_session_info?sessionId=${sessionId}`)
+        //     .then(res => res.json())
+        //     .then((data: any[]) => {
+        //     const allLinks = data.flatMap((item: any) => item.links_quiz || []);
+        //     const uniqueLinks = Array.from(new Set(allLinks));
+        //     setLinksQuiz(uniqueLinks);
+        //     });
+        fetch(`http://127.0.0.1:8000/get_session_info?sessionId=${sessionId}`)
+            .then(res => res.json())
+            .then((data: any[]) => {
+            const getUniqueLinks = (key: 'links_quiz' | 'links_lecture') =>
+                Array.from(new Set(data.flatMap((item: any) => item[key] || [])));
+            setLinksQuiz(getUniqueLinks('links_quiz'));
+            setLinksLecture(getUniqueLinks('links_lecture'));
+            });
+        }, [sessionId, quizCreated]);
     return (
         <Tabs defaultValue='todolist' className="w-full">
 
@@ -155,23 +301,22 @@ const ResultTab = ({ result = { todoList: [], curriculum: {title: '', overview: 
                                             </DialogTrigger>
                                             
 
-                                            <DialogContent
-                                            className="w-[95vw] max-w-[95vw] h-[95vh] p-2"
-                                            style={{ maxWidth: '95vw', maxHeight: '95vh', width: '95vw', height: '95vh' }}>
-                                            <DialogHeader>
-                                                <DialogTitle className="text-slate-950">Lecture Note</DialogTitle>
-                                                    <DialogDescription></DialogDescription>
-                                                </DialogHeader>
+                                            <DialogContent className="w-[95vw] max-w-[95vw] h-[95vh] p-2"
+                                                           style={{ maxWidth: '95vw', maxHeight: '95vh', width: '95vw', height: '95vh' }}>
+                                                <DialogHeader>
+                                                    <DialogTitle className="text-slate-950">Lecture Note</DialogTitle>
+                                                        <DialogDescription></DialogDescription>
+                                                    </DialogHeader>
 
-                                                <ScrollArea className="h-[400px]">
-                                                    <div className="w-2/3">
-                                                        <ReactMarkdown>
-                                                            {result.lectureNotes && index < result.lectureNotes.length ? result.lectureNotes[index] : ""}
-                                                        </ReactMarkdown>
-                                                    </div>
-                                                    <ScrollBar />
-                                                </ScrollArea>
-                                                
+                                                    <ScrollArea className="h-[400px]">
+                                                        <div className="w-2/3">
+                                                            <ReactMarkdown>
+                                                                {result.lectureNotes[index]?.content || ""}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                        <ScrollBar />
+                                                    </ScrollArea>
+            
                                             </DialogContent>
                                         </Dialog>
                                     </AccordionContent>
@@ -190,7 +335,7 @@ const ResultTab = ({ result = { todoList: [], curriculum: {title: '', overview: 
 
             </TabsContent> */}
 
-            <TabsContent value="quiz">
+            {/* <TabsContent value="quiz">
                 <ScrollArea className="h-screen">
                     <div className="p-4 space-y-4">
                         <h2 className="text-xl font-bold mb-2">Quiz Files</h2>
@@ -217,7 +362,73 @@ const ResultTab = ({ result = { todoList: [], curriculum: {title: '', overview: 
                                             </DialogTrigger>
 
 
-        
+                                            <DialogContent 
+                                            className="w-[95vw] max-w-[95vw] h-[95vh] p-2"
+                                            style={{ maxWidth: '95vw', maxHeight: '95vh', width: '95vw', height: '95vh' }}>
+                                                <div className="flex flex-col w-full h-full">
+                                                    <div className="text-lg font-semibold p-2 leading-tight">
+                                                        {displayName}
+                                                    </div>
+                                                    <iframe 
+                                                        src={fileUrl}
+                                                        title={displayName}
+                                                        className="w-full flex-1 border-none rounded"
+                                                    />
+                                                </div>
+                                            </DialogContent>
+
+                                        </Dialog>
+
+                                        <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                                            <ExternalLink className="w-5 h-5 text-blue-500 hover:text-blue-700 ml-2" />
+                                        </a>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </ScrollArea>
+            </TabsContent>
+            */}
+
+
+
+
+
+            <TabsContent value="quiz">
+                <ScrollArea className="h-screen">
+                    <div className="p-4 space-y-4">
+
+                        {/* <button
+                        className="text-blue-600 hover:underline"
+                        onClick={fetchLinks}
+                        >
+                            Làm mới
+                        </button> */}
+
+                        <h2 className="text-xl font-bold mb-2">Quiz Files</h2>
+                        {(linksQuiz?.length ?? 0) === 0 ? ( //result.links_quiz
+                            <p className="text-muted-foreground">No quiz files available.</p>
+                        ) : (
+                            (linksQuiz ?? []).map((fileUrl, idx) => {
+                                // const moduleTitle = result.curriculum?.modules[idx]?.title;
+                                // const fallbackFileName = fileUrl.split('/').pop() || `File ${idx + 1}`;
+                                // const displayName = moduleTitle ? `${moduleTitle}.pdf` : fallbackFileName;
+                                const displayName = fileUrl.split('/').pop() || `File ${idx + 1}`;
+                                return (
+                                    <div 
+                                        key={`lecture-file-${idx}`} 
+                                        className="flex items-center p-3 border rounded-lg hover:shadow transition"
+                                    >
+                                        <FaFilePdf className="w-6 h-6 text-red-600 mr-3" />
+                                        
+                                        <Dialog>
+                                            <DialogTrigger asChild>
+                                                <button className="flex-1 truncate text-left text-blue-600 hover:underline">
+                                                    {displayName}
+                                                </button>
+                                            </DialogTrigger>
+
                                             <DialogContent 
                                             className="w-[95vw] max-w-[95vw] h-[95vh] p-2"
                                             style={{ maxWidth: '95vw', maxHeight: '95vh', width: '95vw', height: '95vh' }}>
@@ -303,17 +514,19 @@ const ResultTab = ({ result = { todoList: [], curriculum: {title: '', overview: 
                     </ScrollArea>
             </TabsContent> */}
 
+           
             <TabsContent value="lecture-note">
                 <ScrollArea className="h-screen">
                     <div className="p-4 space-y-4">
                         <h2 className="text-xl font-bold mb-2">Lecture Files</h2>
-                        {result.links_lecture.length === 0 ? (
+                        {(linksLecture?.length?? 0 ) === 0 ? (
                             <p className="text-muted-foreground">No lecture files available.</p>
                         ) : (
-                            result.links_lecture.map((fileUrl, idx) => {
-                                const moduleTitle = result.curriculum?.modules[idx]?.title;
-                                const fallbackFileName = fileUrl.split('/').pop() || `File ${idx + 1}`;
-                                const displayName = moduleTitle ? `${moduleTitle}.pdf` : fallbackFileName;
+                            ( linksLecture ?? []).map((fileUrl, idx) => { //result.links_lecture
+                                // const moduleTitle = result.curriculum?.modules[idx]?.title;
+                                // const fallbackFileName = fileUrl.split('/').pop() || `File ${idx + 1}`;
+                                // const displayName = moduleTitle ? `${moduleTitle}.pdf` : fallbackFileName;
+                                const displayName = fileUrl.split('/').pop() || `File ${idx + 1}`;
 
                                 return (
                                     <div 
@@ -386,9 +599,12 @@ const ResultTab = ({ result = { todoList: [], curriculum: {title: '', overview: 
             </TabsContent>
 
 
-
+            
         </Tabs>
     )
 }
 
 export default ResultTab;
+
+
+ 
