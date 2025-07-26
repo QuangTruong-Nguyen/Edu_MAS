@@ -1,23 +1,24 @@
 from mas.state import State
-from agents.pydantic_models import Objective
-from agents.pydantic_models import CurriculumDeps, CurriculumResult
-from agents.pydantic_models import SupervisorDeps, CollectDataDeps
+from agents.pydantic_models import LearningObjectiveDeps
+from agents.pydantic_models import SyllabusGeneratorDeps, SyllabusGeneratorResult, KnowledgeRetrievalDeps
+from agents.pydantic_models import CourseBuilderOrchestratorDeps, CourseBuilderOrchestratorResult
 from agents.pydantic_models import LectureNoteDeps, Content, QuizInput, EvaluationInput
 
-from agents.clarify_agent import clarify_agent
-from agents.curriculum_gen import table_content, curriculum_gen_agent
-from agents.supervisor import supervisor_agent
-from agents.collect_data import collect_data_agent
-from agents.lecture_note_gen import lecture_note_gen_agent
-from agents.quiz_gen import quiz_gen_agent
-from agents.presentation_gen import presentation_gen_agent
-from agents.evaluator import evaluator_agent
+from agents.learning_objective import learning_objective_agent
+from agents.course_builder_orchestrator import course_builder_orchestrator_agent
+from agents.syllabus_generator import syllabus_generator_agent
+from agents.knowledge_retrieval import knowledge_retrieval_agent
+from agents.lecture_note import lecture_note_agent
+from agents.quiz_creator import quiz_creator_agent
+from agents.slide_generator import slide_generator_agent
+from agents.content_validator import content_validator_agent
 
 from presentation.drive_ops import create_folder, copy_presentation, move_file_to_folder, is_folder_exist
 from presentation.google_slide_ops import delete_unnecessary_slide, copy_slide, move_slide, update_presentation_content
 
 from typing import List, Literal, Dict
 from langgraph.graph import StateGraph, START, END
+from langgraph.types import Command
 import json
 from datetime import datetime
 from utils.setup import setup_gemini
@@ -28,42 +29,166 @@ import nest_asyncio
 nest_asyncio.apply()
 import uuid
 import asyncio
+from langgraph.checkpoint.memory import MemorySaver
+
+def filter_serializable(state):
+    state_copy = dict(state)
+    
+    # Always remove WebSocket connection (cannot be serialized and stored globally)
+    state_copy.pop("websocket", None)
+    
+    # Remove any queues or other non-serializable objects
+    state_copy.pop("queue", None)
+
+    return state_copy
+
+class WebSocketManager:
+    """
+    Singleton class to manage WebSocket connections globally
+    """
+    _instance = None
+    _websocket = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(WebSocketManager, cls).__new__(cls)
+        return cls._instance
+    
+    def set_websocket(self, websocket):
+        """Set the WebSocket connection"""
+        self._websocket = websocket
+    
+    def get_websocket(self):
+        """Get the WebSocket connection"""
+        return self._websocket
+    
+    async def send_message(self, message):
+        """Send message through WebSocket safely"""
+        try:
+            if self._websocket is not None:
+                await self._websocket.send_json(message)
+            else:
+                print("Warning: Cannot send message - WebSocket is None")
+        except Exception as e:
+            print(f"Error sending WebSocket message: {e}")
+    
+    def is_connected(self):
+        """Check if WebSocket is connected"""
+        return self._websocket is not None
 
 
-async def clarify_agent_node(state: State):
-    deps = Objective(
+# Create global instance
+websocket_manager = WebSocketManager()
+
+async def learning_objective_agent_node(state: State):
+    # Set websocket globally once at the beginning
+    websocket = state.get("websocket")
+    if websocket:
+        websocket_manager.set_websocket(websocket)
+    
+    deps = LearningObjectiveDeps(
         session_id = state.get("session_id"),
+        websocket = websocket,
         user_query = state.get("user_query"),
-        subject = "",
-        level = "",
-        target_audience = "",
-        entire_course = False,
-        chapters = [],
-        thinking = [],
-        websocket = state.get("websocket")
-    )
+    )    
 
-    result = await clarify_agent.run(
+    result = await learning_objective_agent.run(
         "", deps=deps,
         model_settings={'temperature': 0.0}
     )
 
-    # print(result)
+    print("LearningObjectiveAgent:", result.usage())
+    output = result.output
 
-    state["objective"] = result.data
-    state["next_step"] = "curriculum_gen_agent"
-    return state
-
-
-async def curriculum_gen_agent_node(state: State):
-    deps = CurriculumDeps(
-        objective = state.get("objective"),
-        table_content = table_content
+    await websocket.send_json(
+        {   
+            "role": "agent",
+            "content": output.final_response + f"\n\nLearning Objective: {output.learning_obj}",
+            "timestamp": str(datetime.now())
+        }
     )
 
-    result = await curriculum_gen_agent.run("", deps=deps)
+    state["learning_obj"] = output.learning_obj
+    state["next_step"] = "course_builder_orchestrator"
+
     
-    curriculum = {
+    print("LEARNING OBJECTIVE NODE")
+
+    return Command(
+        goto = "course_builder_orchestrator_agent",
+        update = state  #state filter_serializable
+    )
+
+
+async def course_builder_orchestrator_agent_node(state: State):
+    print("COURSE BUILDER ORCHESTRATOR NODE")
+    deps = CourseBuilderOrchestratorDeps(
+        learning_obj = state.get("learning_obj"),
+        todo_list = state.get("todo_list"),
+        syllabus = state.get("syllabus")
+    )
+
+    result = await course_builder_orchestrator_agent.run("", deps=deps)
+    print("CourseBuilderOrchestratorAgent:", result.usage())
+
+    output = result.output
+    print("Sending workflow message via WebSocket...")
+
+    message_id = str(uuid.uuid4())
+    await websocket_manager.send_message({
+        "messageId": message_id,
+        "role": "agent",
+        "content": output.workflow,
+        "timestamp": str(datetime.now())
+    })
+
+    next_action = result.output.next_action
+    state["next_action"] = next_action
+
+    # Convert todo_list from list to dictionary, update state graph
+    pending = {}
+    done = {}
+
+    # Update pending tasks
+    for task in result.output.todo_list.pending:
+        task_dict = {
+            "task_id": str(task.task_id),
+            "specific_requirements": task.specific_requirements
+        }
+
+        pending[str(task.task_id)] = task_dict
+
+    # Update done tasks
+    for task in result.output.todo_list.done:
+        task_dict = {
+            "task_id": str(task.task_id),
+            "specific_requirements": task.specific_requirements
+        }
+
+        done[str(task.task_id)] = task_dict
+
+    state["todo_list"] = {
+        "pending": pending,
+        "done": done
+    }
+
+    print("DONE COURSE BUILDER ORCHESTRATOR NODE")
+    return Command(
+        goto = next_action.target_agent,
+        update = state #state
+    )
+
+
+async def syllabus_generator_agent_node(state: State):
+    print("SYLLABUS GENERATOR NODE")
+    deps = SyllabusGeneratorDeps(
+        learning_obj = state.get("learning_obj"),
+    )
+
+    result = await syllabus_generator_agent.run("", deps=deps)
+    print("SyllabusGeneratorAgent:", result.usage())
+    
+    syllabus = {
         "title": result.data.title,
         "overview": result.data.overview,
         "modules": [
@@ -74,65 +199,46 @@ async def curriculum_gen_agent_node(state: State):
             for module in result.data.modules]
     }
 
-    state["results"]["curriculum"] = curriculum
-    state["next_step"] = "supervisor_agent"
-    return state
+    state["syllabus"] = syllabus
+    state["next_step"] = "course_builder_orchestrator"
+    
+    # Update TODO_list status
+    task_id = state.get("next_action").task_id
+    task_done = state.get("todo_list").get("pending").pop(task_id)
+    state["todo_list"]["done"][task_id] = task_done
 
-
-async def supervisor_agent_node(state: State):
-    deps = SupervisorDeps(
-        curriculum = state.get("results").get("curriculum"),
-        todo_list = state.get("todo_list")
+    print("DONE SYLLABUS GENERATOR NODE")
+    return Command(
+        goto = "course_builder_orchestrator_agent",
+        update = state
     )
 
-    result = await supervisor_agent.run("", deps=deps)
-    # print(result.data)
 
-    next_action = result.data.next_action
-    state["next_action"] = next_action
-
-    # Convert todo_list from list to dictionary
-    if not state.get("todo_list"):
-        state["todo_list"] = {}
-        for task in result.data.todo_list.tasks:
-            task_dict = {
-                "task_id": task.task_id,
-                "description": task.description,
-                "status": task.status
-            }
-
-            state["todo_list"][str(task.task_id)] = task_dict
-
-    # print(state.get("todo_list"))
-    state["next_step"] = next_action.agent
-    state["todo_list"][str(next_action.task_id)]["status"] = "done"
-
-    return state
-
-
-async def collect_data_agent_node(state: State):
-    deps = CollectDataDeps(
-        task = state["next_action"]
+async def knowledge_retrieval_agent_node(state: State):
+    print("KNOWLEDGE RETRIEVAL NODE")
+    deps = KnowledgeRetrievalDeps(
+        task = state["next_action"]        
     )
 
-    # result = await collect_data_agent.run("", deps=deps)
-    # print(result.data)
-
-    # ws = state.get("websocket")
-    # await ws.send_json({
-    #     "role": "agent",
-    #     "content": result.data,
-    #     "timestamp": str(datetime.now())
-    # })
-
-    result = asyncio.run(run_agent(collect_data_agent, state, deps))
+    result = asyncio.run(run_agent(knowledge_retrieval_agent, state, deps))
+    # print("KnowledgeRetrievalAgent:", result.usage())
 
     state["results"]["data"] = result
+    print("DONE KNOWLEDGE RETRIEVAL NODE")
 
-    return state
+    # Update TODO_list status
+    task_id = state.get("next_action").task_id
+    task_done = state.get("todo_list").get("pending").pop(task_id)
+    state["todo_list"]["done"][task_id] = task_done
+
+    state["pre_state"] = "knowledge_retrieval_agent"
+    return Command(
+        goto = "course_builder_orchestrator_agent",
+        update = state
+    )
 
 
-async def lecture_note_gen_node(state: State):
+async def lecture_note_agent_node(state: State):
     print("LECTURE NOTE GEN NODE")
     task = state["next_action"]
 
@@ -151,40 +257,51 @@ async def lecture_note_gen_node(state: State):
     #     "timestamp": str(datetime.now())
     # })
     
-    result = asyncio.run(run_agent(lecture_note_gen_agent, state, deps))
-    # print(result)
-
-    state["lecture_notes"][task.task_id] = result
+    result = asyncio.run(run_agent(lecture_note_agent, state, deps))
+    # print("LectureNoteAgent:", result.usage())
+    
+    state["results"]["lecture_notes"][task.task_id] = result
+    
     # key = str(uuid.uuid4())
     
     # Get name of lecture note from curriculum
     idx = len(state.get("links_lecture"))
-    name = state.get("results").get("curriculum").get("modules")[idx]
-    print("=========================",name['title'] )
+    name = state.get("syllabus").get("modules")[idx]
 
     link_up = f"{state.get('user_id')}/{state.get('project_id')}/{state.get('session_id')}/lecture_note/"
 
-    print("LINK UP: ", link_up)
     
     link=upload_markdown_to_s3(result,'bookmcs',link_up+name['title']+"LECTURE.pdf")
     state["links_lecture"].append(link)
-    return state
+    
+    print("LINK: ", link)
 
+    # Update TODO_list status
+    task_id = state.get("next_action").task_id
+    task_done = state.get("todo_list").get("pending").pop(task_id)
+    state["todo_list"]["done"][task_id] = task_done
 
-async def quiz_gen_node(state: State):
-    print("_____QUIZZ_________")
-    dep = QuizInput(
-        data = state.get("results").get("data")
+    
+    print("DONE LECTURE NOTE GEN NODE")
+    return Command(
+        goto = "course_builder_orchestrator_agent",
+        update = state
     )
 
-    result = await quiz_gen_agent.run(" ", deps=dep)
 
-    # saveMessage(result,'QuizzNode')
-    state['results']["quiz"] = result.data.dict()
-    print("QUIZ: ")
-    print(result.data)
+async def quiz_creator_agent_node(state: State):
+    print("_____QUIZZ_________")
+    dep = QuizInput(
+        data = list(state.get("results").get("lecture_notes").values())[-1]
+    )
 
-    mk=convert_to_markdown(result.data)
+    result = await quiz_creator_agent.run(" ", deps=dep)
+    print("QuizCreatorAgent:", result.usage())
+
+    task = state["next_action"]
+    state["results"]["quizzes"][task.task_id] = result.data.dict()
+
+    mk = convert_to_markdown(result.data)
     
     next_action = state["next_action"]
     key = str(uuid.uuid4())
@@ -194,14 +311,22 @@ async def quiz_gen_node(state: State):
     #     'quiz': result.output
     #       })
     idx = len(state.get("links_quiz"))
-    name= state.get("results").get("curriculum").get("modules")[idx]['title']
+    name = state.get("syllabus").get("modules")[idx]['title']
     link_up = f"{state.get('user_id')}/{state.get('project_id')}/{state.get('session_id')}/quiz/"
     
     link=upload_markdown_to_s3(mk,'bookmcs',link_up+name+"QUIZ.pdf")
     
-    # print(link)
     state["links_quiz"].append(link)
-    return state
+
+    # Update TODO_list status
+    task_id = state.get("next_action").task_id
+    task_done = state.get("todo_list").get("pending").pop(task_id)
+    state["todo_list"]["done"][task_id] = task_done
+
+    return Command(
+        goto = "course_builder_orchestrator_agent",
+        update = state
+    )
 
 
 templates = {
@@ -214,27 +339,28 @@ templates = {
 
 SELECTED_TEMPLATE = ""
 
-async def presentation_gen_node(state: State):
+async def slide_generator_agent_node(state: State):
     print("_____SLIDE_________")
     dep = Content(
-        title = state.get("next_action").description,
-        content = list(state.get("lecture_notes").values())[-1],
+        title = state.get("next_action").specific_requirements,
+        content = list(state.get("results").get("lecture_notes").values())[-1],
         images = [],
         language = "English"
     )
 
-    result = await presentation_gen_agent.run("", deps=dep)
-    
-    state['results']["slide"] = result.data.dict()
-    print("SLIDE: ")
-    # print(result.data)
+    result = await slide_generator_agent.run("", deps=dep)
+    print("SlideGeneratorAgent:", result.usage())
+
+    task = state["next_action"]
+    state["results"]["slides"][task.task_id] = result.data.dict()
+
 
     # Send Websocket to choose template
-    print(f"________________________{state.get('next_action').agent}________________________")
-    if state.get("next_action").agent == "presentation_gen_agent" and state.get("presentation_template_url") == "":
-        ws = state.get("websocket")
+    # print(f"________________________{state.get('next_action').agent}________________________")
+    if state.get("next_action").target_agent == "slide_generator_agent" and state.get("presentation_template_url") == "":
+        # ws = state.get("websocket")
         print("Sending template selection request to WebSocket...")
-        await ws.send_json({
+        await websocket_manager.send_message({
             "messageId": "",
             "role": "agent",
             "content": "",
@@ -243,10 +369,12 @@ async def presentation_gen_node(state: State):
         })
         print("Waiting for template selection from WebSocket...")
         
-        data = await ws.receive_text()
-        content = json.loads(data)
-        template_id = content["template"]
-        SELECTED_TEMPLATE = templates[template_id]
+        websocket = websocket_manager.get_websocket()
+        if websocket:
+            data = await websocket.receive_text()
+            content = json.loads(data)
+            template_id = content["template"]
+            SELECTED_TEMPLATE = templates[template_id]
 
         state["presentation_template_url"] = SELECTED_TEMPLATE
         print(f"Selected template ID: {SELECTED_TEMPLATE}")
@@ -274,73 +402,110 @@ async def presentation_gen_node(state: State):
     update_presentation_content(TARGET_PRESENTATION_ID, slides=result.data.slides, template=TARGET)
 
     next_action = state["next_action"]
-    # state["presentation_urls"].append(
-    #     {
-    #         "name": presentation_name,
-    #         "url": TARGET_PRESENTATION_ID
-    #     }
-    # )
+
+    state["presentation_urls"].append(
+        {
+            "name": presentation_name,
+            "url": TARGET_PRESENTATION_ID
+        }
+    )
     
-    return state
+    # Update TODO_list status
+    task_id = state.get("next_action").task_id
+    task_done = state.get("todo_list").get("pending").pop(task_id)
+    state["todo_list"]["done"][task_id] = task_done
 
 
-async def evaluator_node(state: State):
-    print("_____EVALUATION_________")
-    dep = EvaluationInput(
-        lecture_note = state.get('results').get('lecture_note'),
-        quiz = state.get('results').get('quizz'),
-        slide = state.get('results').get('slide')
+    return Command(
+        goto = "course_builder_orchestrator_agent",
+        update = state
     )
 
-    result = await evaluator_agent.run(" ", deps=dep)
-    # saveMessage(result,'evaluation_agent_node')
-    print("EVALUATION: ")
-    # print(result.data)
+
+async def content_validator_agent_node(state: State):
+    print("_____EVALUATION_________")
+    print(state.get('pre_state'))
+    
+    # if state.get('pre_state') == "slide_generator_agent":
+    #     dep= state.get('results').get('slide')
+    # elif state.get('pre_state') == "lecture_note_agent":
+    #     dep = state.get('results').get('lecture_note')
+    # elif state.get('pre_state') == "quiz_creator_agent":
+    #     dep = state.get('results').get('quiz')
+
+    
+    deps = EvaluationInput(
+        task = state.get("next_action"),
+        results = state.get("results")
+    )
+
+    result = await content_validator_agent.run(" ", deps=deps)
+    print("ContentValidatorAgent:", result.usage())
+    
+    content = f""""
+    Validation results:
+    {result.output.model_dump()}
+    """
+
+    websocket = websocket_manager.get_websocket()
+    await websocket.send_json(
+        {
+            "role": "agent",
+            "content": content,
+            "timestamp": str(datetime.now())
+        }
+    )
+
     state['results']["evaluation"] = result.data.dict()
 
     next_action = state["next_action"]
+
+    # Update TODO_list status
+    task_id = state.get("next_action").task_id
+    task_done = state.get("todo_list").get("pending").pop(task_id)
+    state["todo_list"]["done"][task_id] = task_done
     
-    return state
-
-
-def conditional_edges(state: State):
-    return state.get("next_step")
-
+    state["pre_state"] = "content_validator_agent"
+    return Command(
+        goto = "course_builder_orchestrator_agent",
+        update = state
+    )
 
 graph_builder = StateGraph(State)
 
-graph_builder.add_node("clarify_agent", clarify_agent_node)
-graph_builder.add_node("curriculum_gen_agent", curriculum_gen_agent_node)
-graph_builder.add_node("supervisor_agent", supervisor_agent_node)
-graph_builder.add_node("collect_data_agent", collect_data_agent_node)
-graph_builder.add_node("lecture_note_gen_agent", lecture_note_gen_node)
-graph_builder.add_node("quiz_gen_agent", quiz_gen_node)
-graph_builder.add_node("presentation_gen_agent", presentation_gen_node)
-graph_builder.add_node("evaluator_agent", evaluator_node)
+graph_builder.add_node("learning_objective_agent", learning_objective_agent_node)
+graph_builder.add_node("course_builder_orchestrator_agent", course_builder_orchestrator_agent_node)
+graph_builder.add_node("syllabus_generator_agent", syllabus_generator_agent_node)
+graph_builder.add_node("knowledge_retrieval_agent", knowledge_retrieval_agent_node)
+graph_builder.add_node("lecture_note_agent", lecture_note_agent_node)
+graph_builder.add_node("quiz_creator_agent", quiz_creator_agent_node)
+graph_builder.add_node("slide_generator_agent", slide_generator_agent_node)
+graph_builder.add_node("content_validator_agent", content_validator_agent_node)
 
 
-graph_builder.add_edge(START, "clarify_agent")
-graph_builder.add_edge("clarify_agent", "curriculum_gen_agent")
-graph_builder.add_edge("curriculum_gen_agent", "supervisor_agent")
+graph_builder.add_edge(START, "learning_objective_agent")
+graph_builder.add_edge("learning_objective_agent", "course_builder_orchestrator_agent")
 
 
-graph_builder.add_conditional_edges(
-    "supervisor_agent",
-    conditional_edges,
-    {
-        "collect_data_agent": "collect_data_agent",
-        "lecture_note_gen_agent": "lecture_note_gen_agent",
-        "presentation_gen_agent": "presentation_gen_agent",
-        "evaluator_agent": "evaluator_agent",
-        "quiz_gen_agent": "quiz_gen_agent",
-        "end": END
-    }
-)
+# graph_builder.add_conditional_edges(
+#     "course_builder_orchestrator_agent",
+#     conditional_edges,
+#     {  
+#         "syllabus_generator_agent": "syllabus_generator_agent",
+#         "knowledge_retrieval_agent": "knowledge_retrieval_agent",
+#         "lecture_note_agent": "lecture_note_agent",
+#         "slide_generator_agent": "slide_generator_agent",
+#         "quiz_creator_agent": "quiz_creator_agent",
+#         "content_validator_agent": "content_validator_agent",
+#         "end": END
+#     }
+# )
 
-graph_builder.add_edge("collect_data_agent", "supervisor_agent")
-graph_builder.add_edge("lecture_note_gen_agent", "supervisor_agent")
-graph_builder.add_edge("presentation_gen_agent", "supervisor_agent")
-graph_builder.add_edge("quiz_gen_agent", "supervisor_agent")
-graph_builder.add_edge("evaluator_agent", "supervisor_agent")
-
-graph = graph_builder.compile()
+# graph_builder.add_edge("syllabus_generator_agent", "course_builder_orchestrator_agent")
+# graph_builder.add_edge("knowledge_retrieval_agent", "course_builder_orchestrator_agent")
+# graph_builder.add_edge("lecture_note_agent", "course_builder_orchestrator_agent")
+# graph_builder.add_edge("slide_generator_agent", "course_builder_orchestrator_agent")
+# graph_builder.add_edge("quiz_creator_agent", "course_builder_orchestrator_agent")
+# graph_builder.add_edge("content_validator_agent", "course_builder_orchestrator_agent")
+# memory = MemorySaver()
+graph = graph_builder.compile() #checkpointer = memory

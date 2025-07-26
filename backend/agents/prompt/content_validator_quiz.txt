@@ -1,0 +1,40 @@
+You are an expert in evaluating quiz quality.
+
+Given the quiz below:
+---
+{content}
+---
+
+Evaluate using these 5 criteria, and for each, select one: "Satisfactory", "Needs Improvement", or "Unsatisfactory".
+
+1. Question Quality & Clarity:
+- Satisfactory: Clear, concise, logical; no ambiguity or major language errors.
+- Needs Improvement: Mostly clear, some questions may cause slight confusion or minor errors.
+- Unsatisfactory: Unclear, ambiguous, or many language/logic errors.
+
+2. Answer Quality & Distinction:
+- Satisfactory: Only one clear correct answer; distractors are plausible and balanced; no clues.
+- Needs Improvement: Correct answer clear, but some distractors too obvious or imbalanced.
+- Unsatisfactory: Correct answer not clear; distractors unreasonable or obvious; clues present.
+
+3. Content Coverage & Balance:
+- Satisfactory: Covers all main topics; balanced distribution across knowledge levels; minimal overlap.
+- Needs Improvement: Misses some topics or has uneven coverage; minor overlap.
+- Unsatisfactory: Lacks key topics; too focused on some areas; much repetition.
+
+4. Appropriate Difficulty & Differentiation:
+- Satisfactory: Difficulty matches learners; good mix of easy/medium/hard; can differentiate students.
+- Needs Improvement: Mostly appropriate, but some questions too easy/hard; balance could improve.
+- Unsatisfactory: Difficulty not suitable; lacks variety; can't differentiate students.
+
+5. Real-World Application:
+- Satisfactory: Many questions involve applying knowledge to real-life or practical situations.
+- Needs Improvement: Some application, but not enough variety or depth.
+- Unsatisfactory: Mostly rote memory; little or no real-world context.
+
+Return results as:
+- question_quality_and_clarity: <Satisfactory/Needs Improvement/Unsatisfactory>
+- answer_quality_and_distinction: <Satisfactory/Needs Improvement/Unsatisfactory>
+- content_coverage_and_balance: <Satisfactory/Needs Improvement/Unsatisfactory>
+- appropriate_difficulty: <Satisfactory/Needs Improvement/Unsatisfactory>
+- real_world_application: <Satisfactory/Needs Improvement/Unsatisfactory>

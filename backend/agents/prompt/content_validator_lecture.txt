@@ -1,0 +1,34 @@
+You are an expert in evaluating educational materials.
+
+Given the lecture note below:
+---
+{content}
+---
+
+Evaluate on these 4 criteria, choosing one: "Satisfactory", "Needs Improvement", or "Unsatisfactory" for each.
+
+1. Clarity and Organization:
+- Satisfactory: Clear, logical, easy to follow.
+- Needs Improvement: Mostly clear, some confusion.
+- Unsatisfactory: Disorganized, hard to follow.
+
+2. Completeness and Depth:
+- Satisfactory: Covers all main points, good examples and explanations.
+- Needs Improvement: Some missing details or examples.
+- Unsatisfactory: Lacks key points, very superficial.
+
+3. Accuracy and Up-to-dateness:
+- Satisfactory: Accurate, current, well-referenced.
+- Needs Improvement: Mostly accurate, some outdated or missing sources.
+- Unsatisfactory: Inaccurate, outdated, no sources.
+
+4. Suitability:
+- Satisfactory: Appropriate for learners and objectives.
+- Needs Improvement: Some parts not well-matched.
+- Unsatisfactory: Not suitable.
+
+Return results as:
+- clarity_and_structure: <Satisfactory/Needs Improvement/Unsatisfactory>
+- completeness_and_depth: <Satisfactory/Needs Improvement/Unsatisfactory>
+- accuracy_and_up_to_date: <Satisfactory/Needs Improvement/Unsatisfactory>
+- suitability: <Satisfactory/Needs Improvement/Unsatisfactory>

@@ -59,13 +59,51 @@ const NewProject = ({ creator_id }: Props) => {
     <Dialog>
         <form>
             <DialogTrigger asChild>
-                <Card className="flex w-80 h-48 bg-black items-center justify-center">
+                {/* <Card className="flex w-80 h-48 bg-black items-center justify-center">
                     <CardContent>
                         <div>
                             <Plus className='w-20 h-20 font-bold text-white'/>
                         </div>
                     </CardContent>
+                </Card> */}
+
+                <Card
+                    className="
+                        w-80 h-56 bg-gradient-to-br from-slate-900/50 to-slate-800/60 relative cursor-pointer rounded-2xl flex flex-col items-center
+                        transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-500/20 hover:bg-gradient-to-br hover:from-slate-800/70 hover:to-slate-700/80 
+                        hover:scale-[1.02] group border border-slate-700/50 hover:border-cyan-400/30
+                        backdrop-blur-sm
+                    "
+                    tabIndex={0}
+                    >
+                    <CardContent className="flex flex-col items-center justify-between h-full pt-7 pb-4">
+                        {/* Dấu cộng trong vòng tròn, ở giữa trên */}
+                        <div
+                        className="
+                            flex items-center justify-center
+                            rounded-xl bg-gradient-to-br from-slate-700/80 to-slate-800/90 w-[120px] h-[120px]
+                            mb-6 mt-2
+                            transition-all duration-300
+                            group-hover:bg-gradient-to-br group-hover:from-cyan-500/20 group-hover:to-blue-500/20
+                            shadow-lg group-hover:shadow-cyan-500/30
+                            border border-slate-600/50 group-hover:border-cyan-400/50
+                        "
+                        >
+                        <Plus size={56} className="text-slate-300 group-hover:text-cyan-400 transition-all duration-300 drop-shadow-lg" />
+                        </div>
+                        {/* Text giống như card project */}
+                        <div className="w-full flex flex-col items-center mt-6">
+                        <span className="text-xl font-semibold text-slate-200 group-hover:text-white text-center transition-all duration-300 drop-shadow-sm">
+                            Tạo Project mới
+                        </span>
+                        </div>
+                    </CardContent>
                 </Card>
+
+
+
+
+
             </DialogTrigger>
 
             <DialogContent className="sm:max-w-[425px]">

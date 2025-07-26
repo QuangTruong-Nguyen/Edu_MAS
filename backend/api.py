@@ -10,7 +10,7 @@ import json
 from typing import List
 from datetime import datetime
 
-from agents.pydantic_models import CurriculumResult
+from agents.pydantic_models import SyllabusGeneratorResult
 from presentation.classroom_ops import ClassroomMaterial, classroom_create_course, classroom_create_topic, classroom_create_coursework_material
 # from database import SessionLocal, User
 
@@ -24,6 +24,10 @@ from pymongo.server_api import ServerApi
 from data.newdata import split_markdown_by_title
 from data.huggingFace_utils import embedding
 from data.vectorDB import setup_vector_store
+
+#
+from fastapi import Body
+
 db_password = quote_plus("Truong2003@")
 
 uri = f"mongodb+srv://quangtruongairline:{db_password}@chatbotdb.pzsqjdr.mongodb.net/?retryWrites=true&w=majority&appName=chatbotdb"
@@ -326,7 +330,7 @@ async def processing(path_file):
 
 
 class LearningMaterial(BaseModel):
-    curriculum: CurriculumResult
+    curriculum: SyllabusGeneratorResult
     lecture_urls: List[str]
     presentation_urls: List[str]
     quiz_urls: List[str]
@@ -361,6 +365,91 @@ def export_to_classroom(materials: LearningMaterial):
         ]
 
         classroom_create_coursework_material(course_id, f"[QUIZ] {title}", "", classroom_materials, topic_id)
+
+from fastapi import Path
+
+@app.delete("/session/{session_id}")
+def delete_session(session_id: str = Path(...), db: Session = Depends(get_db)):
+    try:
+        session = db.query(SessionSchema).filter(SessionSchema.session_id == session_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        db.delete(session)
+        db.commit()
+        return {"message": "Session deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/session/{session_id}/rename")
+def rename_session(session_id: str, name: str = Body(...), db: Session = Depends(get_db)):
+    try:
+        session = db.query(SessionSchema).filter(SessionSchema.session_id == session_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session.name = name
+        db.commit()
+        return {"message": "Session renamed successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/project/{project_id}")
+def delete_project(project_id: str, db: Session = Depends(get_db)):
+    try:
+        # Nếu cascade chưa setup, cần xóa session/book liên quan thủ công ở đây!
+        # Xóa các session
+        db.query(SessionSchema).filter(SessionSchema.project_id == project_id).delete()
+        # Xóa các book (nếu có)
+        db.query(BookSchema).filter(BookSchema.project_id == project_id).delete()
+
+        # Xóa Project
+        project = db.query(ProjectSchema).filter(ProjectSchema.project_id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        db.delete(project)
+        db.commit()
+        return {"message": "Project and related data deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# @app.post("/project/{project_id}/rename")
+# def rename_project(project_id: str, name: str = Body(...), db: Session = Depends(get_db)):
+#     try:
+#         project = db.query(ProjectSchema).filter(ProjectSchema.project_id == project_id).first()
+#         if not project:
+#             raise HTTPException(status_code=404, detail="Project not found")
+#         project.name = name
+#         db.commit()
+#         return {"message": "Project renamed successfully"}
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+class RenameProjectRequest(BaseModel):
+    name: str
+
+@app.post("/project/{project_id}/rename")
+def rename_project(
+    project_id: str, 
+    req: RenameProjectRequest, 
+    db: Session = Depends(get_db)
+):
+    try:
+        project = db.query(ProjectSchema).filter(ProjectSchema.project_id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        project.name = req.name
+        db.commit()
+        return {"message": "Project renamed successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

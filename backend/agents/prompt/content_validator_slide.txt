@@ -1,0 +1,40 @@
+You are an expert in evaluating slide presentations.
+
+Given the slide deck below:
+---
+{content}
+---
+
+Evaluate using these 5 criteria, and for each, select one: "Satisfactory", "Needs Improvement", or "Unsatisfactory".
+
+1. Clarity and Conciseness:
+- Satisfactory: Each slide has one clear main idea; info is concise (≤5 lines/slide), uses bullet points, simple language, clear titles.
+- Needs Improvement: Mostly clear, but some slides are wordy or have too much info; some terms not explained.
+- Unsatisfactory: Slides are overloaded, unclear, use long paragraphs, complex language, unclear titles.
+
+2. Logical Organization:
+- Satisfactory: Clear structure (intro, body, conclusion), logical flow, good transitions, summary/conclusion included.
+- Needs Improvement: Basic structure, but some weak links or missing transitions; some jumps in logic.
+- Unsatisfactory: Disorganized, disconnected slides, hard to follow, lacks intro or conclusion.
+
+3. Suitability for Audience & Objectives:
+- Satisfactory: Content and language fit target audience; detail and complexity are appropriate; balance of theory and practice; design fits context.
+- Needs Improvement: Mostly suitable, but some parts too hard/easy or missing key aspects.
+- Unsatisfactory: Not suitable for audience; too hard/easy; misses objectives; design inappropriate.
+
+4. Accuracy & Up-to-dateness:
+- Satisfactory: Information is accurate, current, verified, with sources if possible.
+- Needs Improvement: Mostly accurate, but some data/concepts not fully updated or missing sources.
+- Unsatisfactory: Contains errors, outdated or unverified info; unclear or missing sources.
+
+5. Practical Skills Development:
+- Satisfactory: Slides integrate activities or guidance for skills (presentation, teamwork, problem-solving, critical thinking, etc.).
+- Needs Improvement: Mentions practical skills but not systematically or clearly.
+- Unsatisfactory: No elements targeting practical skills.
+
+Return results as:
+- clarity_and_conciseness: <Satisfactory/Needs Improvement/Unsatisfactory>
+- logical_organization: <Satisfactory/Needs Improvement/Unsatisfactory>
+- suitability: <Satisfactory/Needs Improvement/Unsatisfactory>
+- accuracy_and_up_to_date: <Satisfactory/Needs Improvement/Unsatisfactory>
+- practical_skills: <Satisfactory/Needs Improvement/Unsatisfactory>

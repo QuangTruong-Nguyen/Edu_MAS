@@ -8,7 +8,7 @@ import { Calendar, Home, Workflow, Plus, Search, Settings, KeyRound,
     MessageCircle
 } from 'lucide-react'
 import React, { useState, useEffect } from "react";
-
+import { Trash } from 'lucide-react'
 import {
     Sidebar,
     SidebarContent,
@@ -37,6 +37,13 @@ import Image from 'next/image'
 import { getCookie } from '@/utils';
 import { usePathname } from "next/navigation";
 import UploadDrawer from "../ui/UploadDrawer";
+//////
+import { MoreVertical, Pencil } from 'lucide-react'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { useUser } from "@clerk/nextjs";
+
+
+
 
 // Menu items
 const items = [
@@ -44,27 +51,8 @@ const items = [
         title: "Home",
         url: "/",
         icon: Home,
-    },
-    // {
-    //     title: "Agent Workflow",
-    //     url: "/multiagent",
-    //     icon: Workflow,
-    // },
-    // {
-    //     title: "Chat",
-    //     url: "/chat",
-    //     icon: MessageCircle,
-    // },
-    // {
-    //     title: "Settings",
-    //     url: "#",
-    //     icon: Settings,
-    // },
-    // {
-    //     title: "Secrets",
-    //     url: "/secret",
-    //     icon: KeyRound,
-    // },
+    }
+ 
 ]
 
 type Props = {
@@ -90,53 +78,13 @@ export function AppSidebar({ userId, projectId  } : Props) {
 
     const [uploadedFiles, setUploadedFiles] = useState<{ file_key: string; file_name: string }[]>([]);
 
-    // const handleUploadSuccess = (fileInfo: { file_key: string; file_name: string }) => {
-    //     setUploadedFiles((prev) => [...prev, fileInfo]);
-    // };
 
-
-    // const handleUploadSuccess = () => {
-    //     fetch(`http://localhost:8000/get_book?userId=${userId}&projectId=${projectId}`)
-    //         .then(res => res.json())
-    //         .then(data => setBooks(data));
-    //     };
     const handleUploadSuccess = () => {
             fetch(`http://localhost:8000/get_book?userId=${userId}&projectId=${projectId}`)
                 .then(res => res.json())
                 .then(data => setBooks(data));
             };
-    //++++++++++++++++++++++++++++++++++++++++++++++++++++
-    // async function handleAddNewSession() {
-    //     if (!userId || !projectId) {
-    //         alert("Cần có userId và projectId để tạo session mới!");
-    //         return;
-    //     }
-    //     try {
-    //         const response = await fetch("http://localhost:8000/add_new_session", {
-    //             method: "POST",
-    //             headers: {
-    //                 "Content-Type": "application/json"
-    //             },
-    //             body: JSON.stringify({
-    //                 id: "", // backend tự sinh session_id
-    //                 user_id: userId,
-    //                 project_id: projectId
-    //             })
-    //         });
-    //         const data = await response.json();
-    //         if (data.message === "Session created successfully") {
-    //             // Gọi lại API lấy danh sách session để cập nhật giao diện
-    //             const sessionsResponse = await fetch(`http://localhost:8000/sessions?userId=${userId}&projectId=${projectId}`);
-    //             const sessionsData = await sessionsResponse.json();
-    //             setSessions(sessionsData);
-    //         } else {
-    //             alert("Tạo session không thành công!");
-    //         }
-    //     } catch (error) {
-    //         console.error("Error:", error);
-    //         alert("Có lỗi xảy ra khi tạo session mới.");
-    //     }
-    // }
+    
 
     //___________________________________
     async function handleAddNewSession() {
@@ -190,7 +138,8 @@ export function AppSidebar({ userId, projectId  } : Props) {
 
 
     // const pathname = usePathname();
-    let currentSessionId = null;
+    // let currentSessionId = null;
+    let currentSessionId: string | null = null;
     const pathParts = pathname.split('/');
     if (pathParts.length >= 4 && pathParts[1] === 'p') {
         currentSessionId = pathParts[3];
@@ -212,14 +161,44 @@ export function AppSidebar({ userId, projectId  } : Props) {
                 })
                 .catch(err => console.error(err));
             }, [userId, projectId]);
+
+
+
+    async function handleDeleteSession(sid: string) {
+        try {
+            await fetch(`http://localhost:8000/session/${sid}`, { method: 'DELETE' })
+            setSessions(sessions.filter(s => (s.session_id || s.id) !== sid))
+            if (sid === currentSessionId) router.push(`/p/${projectId}`)
+        } catch (err) {
+            alert('Xoá session thất bại')
+        }
+        }
+
+    function handleRenameSession(sid: string, currentName: string) {
+    const newName = prompt('Nhập tên mới cho session:', currentName)
+    if (!newName || newName.trim() === currentName) return
+
+    // Gọi API đổi tên (bạn cần backend hỗ trợ đổi tên session)
+    fetch(`http://localhost:8000/session/${sid}/rename`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name: newName })
+    }).then(() => {
+        setSessions(sessions.map(s => (s.session_id || s.id) === sid ? { ...s, name: newName } : s))
+    }).catch(() => alert('Đổi tên thất bại'))
+    }
+    const { isLoaded, isSignedIn, user } = useUser();
+    const [isCollapsed, setIsCollapsed] = useState(false);
+
     return (
         <Sidebar 
         className="dark" 
+        // className="bg-[#16181d]"
         collapsible="icon">
         
             <SidebarHeader>
                 <div className="flex justify-end items-center">
-                    <SidebarTrigger />
+                    <SidebarTrigger className="dark:text-white" onClick={() => setIsCollapsed(x => !x)} />
                 </div>
             </SidebarHeader>
 
@@ -227,7 +206,7 @@ export function AppSidebar({ userId, projectId  } : Props) {
                 <SidebarGroup className="dark">
                     <SidebarGroupLabel className="text-md dark">
                         <LibraryBig className="dark:text-white" />
-                        <span className="p-2">Sources</span>
+                        <span className="p-2 dark:text-white">Sources</span>
                     </SidebarGroupLabel>
                     <SidebarGroupAction title="Add new source">
                         <UploadDrawer  userId={userId || ""}
@@ -237,49 +216,8 @@ export function AppSidebar({ userId, projectId  } : Props) {
                             <Plus /> 
                         </UploadDrawer>
                         <span className="sr-only">Add new chat</span>
-                    </SidebarGroupAction>
-
-                    {/* {uploadedFiles.length > 0 && (
-                        <div className="pl-8 pt-2 space-y-1">
-                            {uploadedFiles.map((file) => (
-                                <div key={file.file_key} className="text-white text-xs truncate flex items-center gap-2">
-                                    <Image 
-                                        src="pdf.svg"
-                                        alt="PDF Icon"
-                                        width={20}
-                                        height={20}
-                                    />
-                                    <p className="truncate">{file.file_name}</p>
-                                </div>
-                            ))}
-                        </div>
-                    )} */}
-
-                    {/* {books.length > 0 && (
-                            <div className="pl-8 pt-2 space-y-1">
-                            {books.map((book) => (
-                                <div key={book.book_id} className="text-white text-xs truncate flex items-center gap-2">
-                                <Image 
-                                    src="/pdf.svg"
-                                    alt="PDF Icon"
-                                    width={20}
-                                    height={20}
-                                />
-                                <a
-                                    className="truncate underline"
-                                    href={book.link_book}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title={book.name_book}
-                                >
-                                    {book.name_book}
-                                </a>
-                                </div>
-                            ))}
-                            </div>
-                    )} */}
-
-                    {books.length > 0 && (
+                    </SidebarGroupAction>                    
+                    {!isCollapsed && books.length > 0 && (
                         <div className="pl-8 pt-2 space-y-1 overflow-y-auto max-h-64">
                             {books.map((book) => (
                             <div key={book.book_id} className="text-white text-xs truncate flex items-center gap-2">
@@ -289,6 +227,7 @@ export function AppSidebar({ userId, projectId  } : Props) {
                                 width={20}
                                 height={20}
                                 />
+                                 {!isCollapsed && (
                                 <a
                                 className="truncate underline"
                                 href={book.link_book}
@@ -298,6 +237,7 @@ export function AppSidebar({ userId, projectId  } : Props) {
                                 >
                                 {book.name_book}
                                 </a>
+                                 )}
                             </div>
                             ))}
                         </div>
@@ -314,31 +254,8 @@ export function AppSidebar({ userId, projectId  } : Props) {
                         <Plus className="w-10 h-10"/> 
                         <span className="sr-only">New chat session</span>
                     </SidebarGroupAction>
-
-                    {/* <SidebarGroupContent className="dark">
-                      
                     
-                        <SidebarMenu className="dark">
-                                {sessions.map((session) => {
-                                    const sid = session.session_id || session.id;
-                                    // Kiểm tra nếu là session hiện tại thì thêm class nổi bật
-                                    const isCurrent = sid === currentSessionId;
-                                    const menuItemClass = `dark py-1 ${isCurrent ? "bg-blue-600 text-white" : ""}`;
-                                    return (
-                                        <SidebarMenuItem className={menuItemClass} key={sid}>
-                                            <SidebarMenuButton asChild size="sm">
-                                                <Link href={`/p/${projectId}/${sid}`}>
-                                                    <span className="text-md ml-2 dark:text-white">{session.name || 'Untitled Session'}</span>
-                                                </Link>
-                                            </SidebarMenuButton>
-                                        </SidebarMenuItem>
-                                    );
-                                })}
-                                </SidebarMenu>
-
-                    </SidebarGroupContent> */}
-                                
-
+                    {!isCollapsed && (
                     <SidebarGroupContent className="dark overflow-y-auto max-h-64">
                             <SidebarMenu className="dark">
                                 {sessions.map((session) => {
@@ -348,31 +265,92 @@ export function AppSidebar({ userId, projectId  } : Props) {
                                 return (
                                     <SidebarMenuItem className={menuItemClass} key={sid}>
                                     <SidebarMenuButton asChild size="sm">
+                                        <div className="flex items-center justify-between w-full">
                                         <Link href={`/p/${projectId}/${sid}`}>
-                                        <span className="text-md ml-2 dark:text-white">
+                                        <span className={isCollapsed ? "hidden" : "text-md ml-2 dark:text-white"}>
                                             {session.name || 'Untitled Session'}
                                         </span>
                                         </Link>
+                                        {/* <button
+                                            onClick={async (e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            if (!confirm('Do you want to delete this session?')) return;
+                                            try {
+                                                await fetch(`http://localhost:8000/session/${sid}`, {
+                                                method: 'DELETE'
+                                                });
+                                                // Cập nhật lại danh sách session sau khi xoá
+                                                setSessions(sessions.filter(s => (s.session_id || s.id) !== sid));
+                                                // Nếu đang ở session bị xoá thì chuyển về trang project
+                                                if (sid === currentSessionId) {
+                                                router.push(`/p/${projectId}`);
+                                                }
+                                            } catch (err) {
+                                                alert('Xoá session thất bại');
+                                            }
+                                            }}
+                                            className="ml-2 text-red-500 hover:text-red-700"
+                                            title="Xóa session"
+                                        >
+                                            <Trash size={16} />
+                                        </button> */}
+
+                                         <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                            <button className="ml-2 text-gray-400 hover:text-white" onClick={e => {e.preventDefault(); e.stopPropagation();}}>
+                                                <MoreVertical size={16} />
+                                            </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent>
+                                            {/* Đổi tên */}
+                                            <DropdownMenuItem
+                                                onClick={() => handleRenameSession(sid as string, session.name || '')}
+                                            >
+                                                <Pencil className="mr-2 w-4 h-4" />
+                                                Đổi tên
+                                            </DropdownMenuItem>
+                                            {/* Xóa */}
+                                            <DropdownMenuItem
+                                                onClick={async () => {
+                                                if (!sid) return;
+                                                if (!confirm('Bạn có chắc muốn xoá session này?')) return;
+                                                await handleDeleteSession(sid);
+                                                }}
+                                                className="text-red-600"
+                                            >
+                                                <Trash className="mr-2 w-4 h-4" />
+                                                Xóa
+                                            </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+
+
+                                    </div>
+
+                                        
+
                                     </SidebarMenuButton>
                                     </SidebarMenuItem>
                                 );
                                 })}
                             </SidebarMenu>
                             </SidebarGroupContent>
+                    )}
                 </SidebarGroup>
                     
-                <Collapsible defaultOpen className='group/collapsible'>
+                {/* <Collapsible defaultOpen className='group/collapsible'>
                     <SidebarGroup className="dark">
                         <SidebarGroupLabel asChild className="text-md dark">
                             <CollapsibleTrigger>
                                 Results
                                 <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
                             </CollapsibleTrigger>
-                        </SidebarGroupLabel>  
+                        </SidebarGroupLabel>   */}
 
-                        <CollapsibleContent>
-                            <SidebarGroupContent className="dark">
-                                <SidebarMenu className="dark">
+                        {/* <CollapsibleContent>
+                            <SidebarGroupContent className="dark"> */}
+                                <SidebarMenu className="dark p-2">
                                     {items.map((item) => (
                                         <SidebarMenuItem className="dark py-1" key={item.title}>
                                             <SidebarMenuButton asChild size="sm">
@@ -384,14 +362,14 @@ export function AppSidebar({ userId, projectId  } : Props) {
                                         </SidebarMenuItem>
                                     ))}
                                 </SidebarMenu>
-                            </SidebarGroupContent>
-                        </CollapsibleContent>
+                            {/* </SidebarGroupContent>
+                        </CollapsibleContent> */}
 
-                    </SidebarGroup>
-                </Collapsible>
+                    {/* </SidebarGroup>
+                </Collapsible> */}
 
 
-                <SidebarFooter>
+                {/* <SidebarFooter>
                     <div className="flex items-center space-x-4">
                         <div className="shrink-0">
                             <SignedIn>
@@ -404,23 +382,27 @@ export function AppSidebar({ userId, projectId  } : Props) {
                             <p className="text-sm text-gray-500">whitehatsuzerain3578@gmail.com</p>
                         </div>
                     </div>
-                </SidebarFooter>
-            </SidebarContent>
+                </SidebarFooter> */}
 
-            {/* <SidebarFooter>
-                <div className="flex items-center space-x-4">
-                    <div className="shrink-0">
+
+                <SidebarFooter>
+                    <div className="flex items-center sticky space-x-4">
+                        <div className="shrink-0">
                         <SignedIn>
                             <UserButton />
                         </SignedIn>
+                        </div>
+                        <div className="flex flex-col">
+                        <p className="font-semibold dark:text-white">
+                            {user?.firstName || ""} {user?.lastName || ""}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                            {user?.primaryEmailAddress?.emailAddress || ""}
+                        </p>
+                        </div>
                     </div>
-
-                    <div className="flex flex-col">
-                        <p className="font-semibold dark:text-white">Hải Huỳnh</p>
-                        <p className="text-sm text-gray-500">whitehatsuzerain3578@gmail.com</p>
-                    </div>
-                </div>
-            </SidebarFooter> */}
+                    </SidebarFooter>
+            </SidebarContent>
         </Sidebar>
     )
 }

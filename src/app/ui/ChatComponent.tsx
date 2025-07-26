@@ -16,6 +16,7 @@ import Image from 'next/image'
 import { todo } from 'node:test'
 import { v4 } from 'uuid'
 import { getCookie } from '@/utils';
+import { Play, Loader2 } from 'lucide-react'
 
 
 interface Message {
@@ -24,28 +25,19 @@ interface Message {
   timestamp: string;
   content: string;
   session_id: string;
-  project_id: string;
+  project_id: string; 
   user_id: string; 
+  type?: string; // Optional field for type
 }
+
 
 type Conversation = Message[];
 
 
-
-// function addMessage(conversation: Conversation, role: 'agent' | 'user', text: string): Conversation {
-//   const newMessage: Message = {
-//       role: role,
-//       timestamp: new Date(),
-//       content: text,
-//   };
-
-//   return [...conversation, newMessage];
-// }
-
 let result: {
   todoList: Array<{
       task_id: string;
-      description: string;
+      specific_requirements: string;
       status: string;
   }>,
   curriculum: {
@@ -109,6 +101,8 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
     const user_id = getCookie("userId");
 
     const [quizCreated, setQuizCreated] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
 
 
 
@@ -125,56 +119,7 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
     }, [messages]);
 
   
-    // WebSocket connection setup on component mount
-    // useEffect(() => {
-    //   // Use a relative URL that works in development and production
-    //   const WS_URL = typeof window !== 'undefined'
-    //     ? `ws://${window.location.hostname}:8001/ws`
-    //     : `ws://localhost:8001/ws`;
-      
-    //   const websocket = new WebSocket(WS_URL);
-    //   setWs(websocket);
-
-    //   console.log(websocket)
-  
-    //   websocket.onopen = () => {
-    //     console.log('[CLIENT] Connected to WebSocket server');
-    //     setIsConnected(true);
-    //   };
-  
-    //   websocket.onmessage = (event) => {
-    //     try {
-    //       const parsedMessage = JSON.parse(event.data);
-    //       console.log(parsedMessage);
-          
-    //       if (parsedMessage.hasOwnProperty("role")) {
-    //         setMessages((prev) => [...prev, parsedMessage]);
-    //       } else {
-    //         // result = parsedMessage;
-    //       }
-    //     } catch (error) {
-    //       console.error('Error parsing message from server', error);
-    //     }
-    //   };
-  
-    //   websocket.onclose = () => {
-    //     console.log('[CLIENT] Disconnected from WebSocket server');
-    //     setIsConnected(false);
-    //   };
-  
-    //   websocket.onerror = (error) => {
-    //     console.error('[CLIENT] WebSocket error:', error);
-    //     setIsConnected(false);
-    //   };
-  
-    //   // Clean up the WebSocket connection when the component unmounts
-    //   return () => {
-    //     if (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING) {
-    //       websocket.close();
-    //     }
-    //   };
-    // }, []); // Empty dependency array ensures this runs only once on mount
-  
+    
     useEffect(() => {
         const WS_URL = typeof window !== 'undefined'
           ? `ws://${window.location.hostname}:8001/ws`
@@ -212,15 +157,17 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
                     };
                   
                     return updatedMessages;
-                  });
+                  }); 
               }
             } else {
               result = parsedMessage;
             }
-
-            
+            setIsLoading(true); // Tắt loading khi nhận phản hồi
+            setIsPaused(false); // Reset pause state
           } catch (error) {
             console.error('Error parsing message from server', error);
+            setIsLoading(false); // Tắt loading nếu lỗi
+            setIsPaused(false); // Reset pause state
           }
         };
 
@@ -233,7 +180,7 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
       }, [sessionId]);
 
 
-    // Scroll to bottom when new messages arrive
+    // Scroll to bottom when messages arrive
     useEffect(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -249,6 +196,7 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
       const messageId = v4();
   
       if (messageText.trim()) {
+        
         const message: Message = {
           messageId: messageId, 
           content: messageText,
@@ -256,7 +204,8 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
           timestamp: new Date().toISOString(),
           session_id: sessionId,
           project_id: project_id,
-          user_id: user_id
+          user_id: user_id,
+          type: 'text'
         };
 
         setMessages((prev) => [...prev, message]);
@@ -265,72 +214,34 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
       }
     };
 
-    
+    const handleResumeAgent = () => {
+      if (isLoading && !isPaused) {
+        setIsPaused(true);
+        // Có thể gửi signal pause đến server ở đây
+        const pause = {
+            "active": "pause" 
+        }
+      } else if (isLoading && isPaused) {
+        setIsPaused(false);
+        // Có thể gửi signal resume đến server ở đây
+        const resume = {
+          "active": "resume" 
+        }
+      }
+    };
 
-    // const handleSendMessage = (e: React.FormEvent) => {
-    //   e.preventDefault(); // Prevent the default form submission behavior (page reload)
-  
-    //   if (messageText.trim()) {
-    //     const message: Message = {
-    //       content: messageText,
-    //       role: 'user', 
-    //       timestamp: new Date().toISOString(),
-    //     };
-
-    //     fetch(`http://localhost:8000/save_message`, {
-    //       method: "POST",
-    //       headers: {
-    //         "Content-Type": "application/json"
-    //       },
-    //       body: JSON.stringify({
-    //         session_id: sessionId,
-    //         content: messageText, 
-    //         role: "user",
-    //         timestamp: new Date().toISOString(),
-    //       }),
-    //     })
-    //     .catch(error => {
-    //       console.error("Lỗi khi thêm message:", error);
-    //     });
-
-    //     const response: Message = {
-    //       content: "Hello, How can I help you?",
-    //       role: 'agent',
-    //       timestamp: new Date().toISOString(),
-    //     }
-
-    //     fetch(`http://localhost:8000/save_message`, {
-    //       method: "POST",
-    //       headers: {
-    //         "Content-Type": "application/json"
-    //       },
-    //       body: JSON.stringify({
-    //         session_id: sessionId,
-    //         content: messageText, 
-    //         role: "agent",
-    //         timestamp: new Date().toISOString(),
-    //       }),
-    //     })
-    //     .catch(error => {
-    //       console.error("Lỗi khi thêm message:", error);
-    //     });
-
-    //     setMessages((prev) => [...prev, message, response]);
-    //     setMessageText(''); // Clear the input after sending
-        
-    //     console.log(messages);
-    //   }
-    // };
-       
     return (
           <ResizablePanelGroup
             direction="horizontal"
             className="w-full h-screen max-h-screen rounded-lg"
           >
-            <ResizablePanel defaultSize={60} minSize={40}>
+            <ResizablePanel 
+                    defaultSize={60} minSize={40}
+                    // className="h-full min-h-0"            
+            >
               <div className="w-full h-full grid grid-rows-10 gap-4 p-4">
                 <div className="">
-                    <h3 className="text-lg text-slate-700 font-semibold">Introduction to Artificial Intelligence</h3>
+                    <h3 className="text-lg text-slate-700 font-semibold">EduGen- MAS</h3>
                 </div>
 
                 {/* message list */}
@@ -346,9 +257,24 @@ const ChatComponent = ({ sessionId, project_id }: Props) => {
                             placeholder='Type your message ...' 
                             className="grow focus:border-2 focus:border-sky-500 ring-0 focus:ring-0 flex-row"
                      />
-                     <Button className="w-10 flex-none bg-blue-500 ml-2">
-                         <Send className='w-4 h-4' />
-                     </Button>
+                     
+                     <Button className={`w-10 h-10 flex-none ml-2 rounded-full ${
+                          isLoading ? 'bg-gradient-to-r from-blue-700 via-purple-700 to-pink-700 animate-pulse' : 'bg-blue-500'
+                     }`}
+                            style={isLoading ? {animationDuration: '0.5s'} : {}}
+                            onClick={handleResumeAgent}
+                            type={isLoading ? "button" : "submit"}
+                     >
+                          {isLoading ? (
+                            isPaused ? (
+                              <Play className='w-4 h-4' />
+                            ) : (
+                              <Loader2 className='w-4 h-4 animate-spin' />
+                            )
+                          ) : (
+                            <Send className='w-4 h-4' />
+                          )}
+                      </Button>
                  </form>
                 </div>
               </div>

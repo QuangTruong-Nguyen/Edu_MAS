@@ -33,6 +33,7 @@ class ProjectSchema(Base):
     create_at = Column(DateTime)
     creator_id = Column(String, ForeignKey('users.user_id'))  
     # creator = relationship("User", back_populates="projects")
+    sessions = relationship("SessionSchema", back_populates="project", cascade="all, delete-orphan")
     
 
 class SessionSchema(Base):
@@ -40,6 +41,7 @@ class SessionSchema(Base):
     session_id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.user_id"))
     project_id = Column(String, ForeignKey("projects.project_id"))
+    project = relationship("ProjectSchema", back_populates="sessions")
     
 class BookSchema(Base):
     __tablename__="books"

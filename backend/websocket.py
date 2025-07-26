@@ -61,18 +61,18 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            user_query = json.loads(data)
+            content = json.loads(data)
             
-            session_id = user_query["session_id"]
+            session_id = content["session_id"]
 
             mongodb["chatbotdb"].update_one(
                 { "session_id": session_id },
                 {
                     "$push": { 
                         "messages": {
-                            "content": user_query['content'],
-                            "role": user_query['role'],                                
-                            "timestamp": user_query['timestamp']
+                            "content": content['content'],
+                            "role": content['role'],                                
+                            "timestamp": content['timestamp']
                         },
                     }
                 },
@@ -82,32 +82,40 @@ async def websocket_endpoint(websocket: WebSocket):
                 
             init_state = {
                 "session_id": session_id,
-                "project_id": user_query["project_id"],
-                "user_id": user_query["user_id"],
+                "project_id": content["project_id"],
+                "user_id": content["user_id"],
                 "title": "",
-                "user_query": user_query["content"],
+                "user_query": content["content"],
                 "websocket": websocket, 
-                "results": {},
-                "todo_list": {},
-                "lecture_notes": {},
+                "syllabus": {},
+                "results": {
+                    "data": {},
+                    "lecture_notes": {},
+                    "slides": {},
+                    "quizzes": {}
+                },
+                "todo_list": {
+                            "pending": {},
+                            "done": {}},
+                # "lecture_notes": {},
                 "presentation_template_url": "",
                 "presentation_folder_url": "",
                 "presentation_urls": [],                
                 "links_lecture": [],
                 "links_quiz" : [],
             }
-
+            
             current_state = {}
-            async for chunk in graph.astream(init_state, stream_mode="values", config={"recursion_limit": 1000}):
+            config = {"recursion_limit": 1000, "thread_id": "1"}
+            async for chunk in graph.astream(init_state, stream_mode="values", config={"recursion_limit": 1000,"thread_id": "1"}):                
                 current_state = dict(chunk) 
                 
-                await websocket.send_json({
-                    "messageId": str(uuid.uuid4()),
-                    "role": "agent",
-                    "content": f"{str(current_state)}",                
-                    "timestamp": str(datetime.now())
-                })   
-                
+                # await websocket.send_json({
+                #     "messageId": str(uuid.uuid4()),
+                #     "role": "agent",
+                #     "content": f"{str(current_state)}",                
+                #     "timestamp": str(datetime.now())
+                # })   
                 
 
                 if current_state.get("results").get("quiz"):
@@ -120,32 +128,38 @@ async def websocket_endpoint(websocket: WebSocket):
                     } for quiz in current_state.get("results").get("quiz")['questions']]
                 else:
                     quiz_data = []
-                # current_state['title'] = current_state.get("results").get("curriculum")['title']
+                
+
+                todo_list = []
+                for task in list(current_state.get("todo_list").get("done").values()):
+                    task["status"] = "done" 
+                    todo_list.append(task)
+
+                for task in list(current_state.get("todo_list").get("pending").values()):
+                    task["status"] = "pending" 
+                    todo_list.append(task)
+
+
+                # current_state['title'] = current_state.get("syllabus")['title']
+
                 send_data = {
-                    "todoList": list(current_state.get("todo_list").values()),
-                    "curriculum": current_state.get("results").get("curriculum"),
-                    "lectureNotes": [{"content": note} for note in list(current_state.get("lecture_notes").values())],
+                    "todoList": todo_list,
+                    "curriculum": current_state.get("syllabus"),
+                    "lectureNotes": [{"content": note} for note in list(current_state.get("results").get("lecture_notes").values())],
                     "quizzes": quiz_data,
                     "presentationURL": current_state.get("presentation_urls"),
                     "links_lecture": current_state.get("links_lecture"),
                     "links_quiz": current_state.get("links_quiz")
                 }
 
-                if current_state.get("results").get("curriculum"):
-                    curriculum = current_state.get("results").get("curriculum")
+                if current_state.get("syllabus"):
+                    syllabus = current_state.get("syllabus")
                     # print(curriculum)
-                    current_state["title"] = curriculum["title"]
+                    current_state["title"] = syllabus["title"]
 
                 if current_state.get("links_quiz"):
                     send_data["event"] = "quiz_created"
                 
-                ##==============
-              
-                # "messages": {
-                #             "content": user_query['content'],
-                #             "role": user_query['role'],                                
-                #             "timestamp": user_query['timestamp']
-                #         },
                 
                 mongodb["chatbotdb"].update_one(
                 { "session_id": session_id },
@@ -155,8 +169,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             "project_id": current_state["project_id"],
                             "user_id": current_state["user_id"],
                             "results": current_state.get("results"),
-                            "todo_list": current_state.get("todo_list"),
-                            "lecture_notes": [{"content": note} for note in list(current_state.get("lecture_notes").values())],
+                            "todo_list": current_state.get("todo_list").get("done"),
+                            "lecture_notes": [{"content": note} for note in list(current_state.get("results").get("lecture_notes").values())],
                             "presentation_template_url": current_state.get("presentation_template_url"),
                             "presentation_folder_url": current_state.get("presentation_folder_url"),
                             "presentation_urls": current_state.get("presentation_urls"),
@@ -167,39 +181,39 @@ async def websocket_endpoint(websocket: WebSocket):
                 },
                 
                 upsert=True
-            )
+                )
                 
                 await websocket.send_json(send_data)
 
-            await websocket.send_json({
-                "messageId": "",
-                "role": "agent",
-                "content": "",
-                "timestamp": str(datetime.now()),
-                "type": "export"
-            })
+            # await websocket.send_json({
+            #     "messageId": "",
+            #     "role": "agent",
+            #     "content": "",
+            #     "timestamp": str(datetime.now()),
+            #     "type": "export"
+            # })
 
-            data = await websocket.receive_text()
-            is_export = json.loads(data)
+            # data = await websocket.receive_text()
+            # is_export = json.loads(data)
 
-            if is_export["export"]:
-                materials = LearningMaterial(
-                    curriculum = current_state.get("results").get("curriculum"),
-                    lecture_urls = current_state.get("links_lecture"),
-                    presentation_urls = [],
-                    quiz_urls = current_state.get("links_quiz")
-                )
+            # if is_export["export"]:
+            #     materials = LearningMaterial(
+            #         curriculum = current_state.get("results").get("curriculum"),
+            #         lecture_urls = current_state.get("links_lecture"),
+            #         presentation_urls = [],
+            #         quiz_urls = current_state.get("links_quiz")
+            #     )
 
-                url = "http://localhost:8000/export/classroom"
-                payload = materials.model_dump()
+            #     url = "http://localhost:8000/export/classroom"
+            #     payload = materials.model_dump()
 
-                response = requests.post(url, json=payload)
+            #     response = requests.post(url, json=payload)
 
-                # Handle response
-                if response.ok:
-                    print(response.json())
-                else:
-                    print("Error:", response.status_code)
+            #     # Handle response
+            #     if response.ok:
+            #         print(response.json())
+            #     else:
+            #         print("Error:", response.status_code)
 
 
     except WebSocketDisconnect:

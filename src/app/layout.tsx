@@ -67,11 +67,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // <html lang="en">
-    //   <body className="min-h-screen bg-slate-50">
-    //     {children}
-    //   </body>
-    // </html>
+
 
     <ClerkProvider>
       <html lang="en">
@@ -80,32 +76,6 @@ export default function RootLayout({
         </body>
       </html>
     </ClerkProvider>
-
-
-    // <ClerkProvider>
-    //       <html lang="en">
-    //         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-    //         {children}
-    //         {/* <div className="flex sticky top-0 items-center justify-between p-3 bg-slate-200">
-    //             <div className="flex items-center gap-2">
-    //               <div className="size-24 rounded-full bg-conic/decreasing from-violet-700 via-lime-300 to-violet-700 rounded-full w-12 h-12 flex items-center justify-center">
-    //                 <GraduationCap className="w-8 h-8 text-white" />
-    //               </div>
-    //               <span className="text-lg font-semibold">Educational Multiagent System</span>
-    //             </div>
-    //             <header className="flex items-center gap-4">
-    //                 <SignedOut>
-    //                   <SignInButton />
-    //                   <SignUpButton />
-    //                 </SignedOut>
-    //                 <SignedIn>
-    //                   <UserButton />
-    //                 </SignedIn>
-    //             </header>
-    //           </div> */}
-              
-    //         </body>
-    //       </html>
-    // </ClerkProvider>
+  
   );
 }
