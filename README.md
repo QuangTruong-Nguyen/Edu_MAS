@@ -1,10 +1,10 @@
-# 🌟 EUREKA: Multi-Agent AI System for Educational Content Generation
+# 🌟 Multi-Agent AI System for Educational Content Generation
 
-![Demo](https://youtu.be/0uGupxk7qaA) 
 
 > **"Empowering educators by automating the creation of high-quality, scalable learning materials."**
 
-EUREKA is an AI-powered multi-agent system designed to generate cohesive educational packages including **lecture notes**, **presentations**, and **quizzes**, tailored to specific learning objectives. The system is built using a distributed architecture with a modern web frontend (Next.js), real-time backend (FastAPI + WebSockets), and advanced AI orchestration using `LangGraph` and `PydanticAI`.
+System is an AI-powered multi-agent system designed to generate cohesive educational packages including **lecture notes**, **presentations**, and **quizzes**, tailored to specific learning objectives. The system is built using a distributed architecture with a modern web frontend (Next.js), real-time backend (FastAPI + WebSockets), and advanced AI orchestration using `LangGraph` and `PydanticAI`.
+
 
 ---
 
@@ -54,7 +54,6 @@ The system includes the following agents:
 - MongoDB, PostgreSQL (local or cloud)
 - AWS account (for S3)
 - Google Slides API credentials
-
 ---
 
 ### 🖥️ Local Setup
@@ -64,7 +63,6 @@ The system includes the following agents:
 git clone https://github.com/QuangTruong-Nguyen/Edu_MAS.git
 
 cd Edu_MAS
-
 ```
 
 ### 🖥️ 2. Install Frontend (Next.js)
@@ -75,6 +73,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed.
 
 # Start the development server
 npm run dev
+
 ```
 
 ### 🐍 3. Run Backend API & WebSocket (Python + FastAPI)
