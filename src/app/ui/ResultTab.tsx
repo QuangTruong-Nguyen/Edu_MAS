@@ -303,90 +303,100 @@ const ResultTab = ({
                 <ScrollArea className="h-screen" >   
                     {/* Thanh tiến trình tổng quan */}
                 {result?.todoList && result?.todoList.length > 0 && (
-                  <div className="flex items-center gap-4 px-4 pt-4">
+                  <div className="flex items-center gap-4 px-6 pt-6">
                     <div className="flex-1">
                       {/* Progress bar ngang sử dụng shadcn ui */}
-                      <div className="flex items-center mb-2 gap-2">
-                        <Progress value={(result.todoList.filter(t => t.status === 'done').length / (result.todoList.length || 1)) * 100} className="flex-1 text-green-200" />
-                        <span className="ml-2 w-12 text-right text-sm font-semibold text-green-700">
+                      <div className="flex items-center mb-4 gap-3">
+                        <Progress value={(result.todoList.filter(t => t.status === 'done').length / (result.todoList.length || 1)) * 100} className="flex-1 h-3" />
+                        <span className="ml-2 w-16 text-right text-lg font-bold text-green-600">
                           {Math.round((result.todoList.filter(t => t.status === 'done').length / (result.todoList.length || 1)) * 100)}%
                         </span>
                       </div>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="flex items-center gap-1 text-sm font-medium text-gray-700">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="flex items-center gap-2 text-base font-semibold text-gray-800">
                             {currentAgent ? (
                                 <>
-                                    <Loader2 className="w-4 h-4 animate-spin text-blue-500"/>
-                                    <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent font-semibold animate-pulse">
+                                    <Loader2 className="w-5 h-5 animate-spin text-blue-500"/>
+                                    <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent font-bold animate-pulse">
                                         Running: {currentAgent.replace('_agent', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                         <span className="inline-block animate-bounce ml-1">...</span>
                                     </span>
                                 </>
                             ) : (
                                 <>
-                                    <Hourglass className="w-4 h-4"/> 
-                                    <span className="text-gray-500">MAS Ready</span>
+                                    <Check className="w-5 h-5 text-green-500"/> 
+                                    <span className="text-green-600 font-semibold">System Ready</span>
                                 </>
                             )}
                         </span>
-                        <span className="text-xs text-gray-500">{`${result.todoList.filter(t => t.status === 'done').length} of ${result.todoList.length} task completed`}</span>
+                        <span className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                          {`${result.todoList.filter(t => t.status === 'done').length} / ${result.todoList.length} completed`}
+                        </span>
                       </div>
-                      {/* Thanh dọc với các node task */}
-                      <div className="relative" style={{minHeight: `${result.todoList.length * 36}px`}}>
-                        {/* Thanh progress bar dọc bắt đầu từ node đầu, kết thúc ở node cuối */}
-                        {/* {result.todoList.length > 1 && (
-                          <>
-                            <div
-                              className="absolute left-[11px] w-[2px] bg-gray-200 z-0"
-                              style={{
-                                top: '18px',
-                                height: `${(result.todoList.length - 1) * 36}px`
-                              }}
-                            />
-                            <div
-                              className="absolute left-[11px] w-[2px] bg-green-500 z-0 transition-all duration-300"
-                              style={{
-                                top: '18px',
-                                height: `${((result.todoList.filter(t => t.status === 'done').length - 1) / (result.todoList.length - 1)) * ((result.todoList.length - 1) * 36)}px`
-                              }}
-                            />
-                          </>
-                        )} */}
-                        {/* Task list */}
-                        <div className="flex flex-col py-1 relative z-10">
-                          {result?.todoList.map((task, idx) => {
-                            const isDone = task.status === 'done';
-                            const isCurrent = task.status === 'pending' && result.todoList.findIndex(t => t.status === 'pending') === idx;
-                            const isRunning = currentAgent && task.specific_requirements.toLowerCase().includes(currentAgent.replace('_agent', '').replace(/_/g, ' '));
-                            
-                            return (
-                              <div key={task.task_id} className={`flex flex-row items-start min-h-[36px] p-2 relative transition-all duration-300 ${
-                                isRunning ? 'bg-blue-50 border-l-4 border-blue-400' : ''
-                              }`}>
-                                {/* Node là chấm nhỏ sát lề trái, align-top, nằm trên thanh */}
-                                <div className="relative z-10" style={{width: '24px', height: '36px', display: 'flex', alignItems: 'flex-start', justifyContent: 'center'}}>
-                                  <div className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full ring-1 flex items-center justify-center transition-all duration-200 ${
-                                    isDone ? 'ring-green-600 bg-green-500' : 
-                                    isRunning ? 'ring-blue-500 bg-blue-500 animate-pulse' :
-                                    isCurrent ? 'ring-orange-500 bg-orange-500 animate-pulse' : 
-                                    'ring-gray-400 bg-white'
+                      
+                      {/* Task list với card design */}
+                      <div className="space-y-3">
+                        {result?.todoList.map((task, idx) => {
+                          const isDone = task.status === 'done';
+                          const isCurrent = task.status === 'pending' && result.todoList.findIndex(t => t.status === 'pending') === idx;
+                          const isRunning = currentAgent && task.specific_requirements.toLowerCase().includes(currentAgent.replace('_agent', '').replace(/_/g, ' '));
+                          
+                          return (
+                            <div key={task.task_id} className={`relative p-4 rounded-lg border-l-4 transition-all duration-300 shadow-sm hover:shadow-md ${
+                              isDone ? 'bg-green-50 border-green-400 shadow-green-100' :
+                              isRunning ? 'bg-blue-50 border-blue-400 shadow-blue-100' :
+                              isCurrent ? 'bg-orange-50 border-orange-400 shadow-orange-100' : 
+                              'bg-white border-gray-300'
+                            }`}>
+                              <div className="flex items-start gap-4">
+                                {/* Status Icon */}
+                                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ${
+                                  isDone ? 'bg-green-500 text-white' : 
+                                  isRunning ? 'bg-blue-500 text-white animate-pulse' :
+                                  isCurrent ? 'bg-orange-500 text-white animate-pulse' : 
+                                  'bg-gray-200 text-gray-500'
+                                }`}>
+                                  {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : 
+                                   isDone ? <Check className="w-4 h-4" /> :
+                                   <span className="w-2 h-2 bg-current rounded-full"></span>}
+                                </div>
+                                
+                                {/* Task Content */}
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium leading-relaxed ${
+                                    isDone ? 'text-green-800' :
+                                    isRunning ? 'text-blue-800' :
+                                    'text-gray-800'
                                   }`}>
-                                    {isRunning ? <Loader2 className="w-2 h-2 animate-spin text-white" /> : null}
-                                    {isDone ? <Check className="w-2 h-2 text-white" /> : null}
+                                    {task.specific_requirements}
+                                  </p>
+                                  
+                                  {/* Status Badge */}
+                                  <div className="mt-2">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                      isDone ? 'bg-green-100 text-green-800' :
+                                      isRunning ? 'bg-blue-100 text-blue-800' :
+                                      isCurrent ? 'bg-orange-100 text-orange-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {isDone ? '✓ Completed' :
+                                       isRunning ? '● Running' :
+                                       isCurrent ? '⏳ Pending' :
+                                       '○ Waiting'}
+                                    </span>
                                   </div>
                                 </div>
-                                <span className={`text-sm flex items-start h-full ml-6 pt-0.5 transition-all duration-200 ${
-                                  isDone ? 'text-green-700 line-through' :
-                                  isRunning ? 'text-blue-700 font-medium' :
-                                  'text-gray-800'
-                                }`}>
-                                  {task.specific_requirements}
-                                  {isRunning && <span className="ml-2 text-blue-500 animate-pulse">●</span>}
-                                </span>
+                                
+                                {/* Progress Indicator */}
+                                {isRunning && (
+                                  <div className="flex-shrink-0">
+                                    <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                                  </div>
+                                )}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
